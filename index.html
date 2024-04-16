@@ -1,1 +1,125 @@
-"Hello World" 
+<!DOCTYPE html>
+<html data-theme='dark'>
+  <head>
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="css/themes.css" />
+    <link rel="stylesheet" type="text/css" href="css/bootstrap-themed.css" />
+
+    <!-- JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+
+    <!-- Other stuff -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <style>
+      label{
+        margin-bottom: .1rem;
+      }
+      .hint{
+        padding: 0;
+        margin: 0;
+        margin-bottom: .25rem;
+        font-size: 80%;
+        opacity: .5;
+      }
+    </style>
+    <script>
+      var processFile = function(event) {
+        var zip = new JSZip();
+        zip.loadAsync(event.target.files[0]).then(function(zip) {
+          
+          // TODO: EXTRACT THE NECESSARY DATA FROM THE FILE
+
+          // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
+
+          
+        // File doesn't have the zip format
+        }, function() {
+          alert("Not a valid zip file");
+          // TODO: ALERT (maybe a toast? snackbar?)
+        });
+      };
+
+    </script>
+
+    <div class="container">
+      <div class="row justify-content-md-center pt-5 pb-5">
+        <div class="card rounded col p-3" style="max-width: 500px;">
+          <h5>Submission details</h4>
+    
+          <!--https://stackoverflow.com/questions/4459379/preview-an-image-before-it-is-uploaded-->
+          <div class="form-group">
+            <label>File:</label>
+            <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" onchange="processFile(event)" />
+            <p class="opacity-600 mb-0">
+              Information detected from the file:<br>
+              <b>• Format:</b> <span id="lbFormat">...</span><br>
+              <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
+              <b>• Categories:</b> <span id="lbCategories">...</span><br>
+              <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
+              <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
+            </p>
+          </div>
+
+          <hr>
+
+          <div class="form-group">
+            <label>Game name:</label>
+            <p class="hint">The name of the game your song comes from.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
+          </div>
+
+          <div class="form-group">
+            <label>Song name:</label>
+            <p class="hint">The actual name of the song.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
+          </div>
+
+          <div class="form-group">
+            <label>Composer(s):</label>
+            <p class="hint">A list of the names of the original composers of this song.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+          </div>
+
+          <div class="form-group">
+            <label>Converter(s):</label>
+            <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Tolin" />
+          </div>
+
+          <div class="form-group">
+            <label>Song type:</label>
+            <p class="hint">
+              <b>• Background Music (BGM):</b> looping track, used as background music.<br>
+              <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
+            </p>
+            <select class="form-control">
+              <option>Background Music (BGM)</option>
+              <option>Fanfare</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Preview link:</label>
+            <p class="hint">
+              Link to a preview of this songs. Can it be on two formats:<br>
+              <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
+              <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
+            </p>
+            <input type="text" class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label>Notes:</label>
+            <input type="text" class="form-control" />
+          </div>
+
+
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
