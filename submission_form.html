@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html data-theme='dark'>
+  <head>
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="css/themes.css" />
+    <link rel="stylesheet" type="text/css" href="css/bootstrap-themed.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+    <!-- JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+
+    <!-- Other stuff -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <style>
+      .loading-overlay {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        color: var(--primary-normal);
+        background-color: var(--loading-overlay-backdrop-color);
+        z-index: 5600;
+      }
+      .loading-overlay i{
+          position: absolute;
+          top: 47%;
+          left: 47%;
+      }
+
+      label{
+        margin-bottom: .1rem;
+      }
+      .hint{
+        padding: 0;
+        margin: 0;
+        margin-bottom: .25rem;
+        font-size: 80%;
+        opacity: .5;
+      }
+    </style>
+
+    <script type="module">
+      import { Octokit, App } from "https://esm.sh/octokit";
+
+      var authToken = "";
+
+      // Info about the user:
+      var username = "";
+      var fullName = "";
+      var email = "";
+      var avatarUrl = "";
+
+      // Valid repos of the user:
+      var repos = [];
+
+      async function userLogin(){
+        try {
+          //loadForm();
+          //return;
+
+          // We put an overlay to prevent more user action
+          $("#loadingOverlay").removeClass("d-none");
+
+          // Get the token the user put
+          var authToken = $("#txtGithubAuthToken").val();
+          console.log(authToken);
+          const octokit = new Octokit({ auth: authToken });
+
+          // Get the username of this token
+          var user = await octokit.request('GET /user');
+          username = user.data.login;
+          fullName = user.data.name;
+          email = user.data.email;
+          avatarUrl = user.data.avatar_url;
+
+          // Load the user info
+          $("#imgAvatar").prop("src", avatarUrl);
+          $("#lbUsername").text(username);
+
+          // Get their repos
+          var allRepos = await octokit.request('GET /users/{username}/repos', {
+            username: username,
+          });
+          console.log(allRepos);
+          
+          // Check all the repos to see which one are a z64 repo
+          await Promise.all(allRepos.data.map(async (repo) => {
+            // Only use fork repos, because only those can pull-request
+            if(repo.fork){
+              // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
+              var z64PropertiesLink = "https://raw.githubusercontent.com/" + repo.full_name + "/" + repo.default_branch + "/z64musicpacker.properties";
+              var response = await fetch(z64PropertiesLink);
+              
+              if(response.ok){
+                console.log(response);
+              }
+
+              
+              return;
+
+
+              // Load the repo into our list
+              repos.push({
+                id: repo.id,
+                fullName: repo.full_name,
+                name: repo.name,
+                url: repo.url,
+                defaultBranch: repo.default_branch,
+
+                // Z64 music packer properties
+                
+              });
+            }
+          }));
+
+          
+          
+
+          
+
+          // Once we finish, we change form and stop the loading
+          $("#loadingOverlay").addClass("d-none");
+          $("#panelAuthorization").addClass("d-none");
+          $("#panelSubmissionDetails").removeClass("d-none");
+
+          // If we catch an error, show it to the user
+          // TODO: USE A MORE USER-FRIENDLY WAY TO SHOW THE ERROR
+        } catch(e){
+          $("#loadingOverlay").addClass("d-none");
+          alert(e);
+        }
+      }
+
+      function loadForm(){
+        
+
+        // Load the repo list
+
+        // TODO: LOAD SPECIFIC REPO STUFF...
+      }
+
+      function processFile(event) {
+        var file = event.target.files[0];
+        var zip = new JSZip(); // https://stuk.github.io/jszip/documentation/api_jszip.html
+        zip.loadAsync(file).then(function(zip) {
+          // If it's not a valid file, we just stop the process here
+          var ootrs = file.name.endsWith(".ootrs");
+          if(!ootrs && !file.name.endsWith(".mmrs")) return;
+          
+          var usesCustomBank = false;
+          var usesCustomSamples = false;
+
+          // Run over each file and extract data
+          zip.forEach(function(path, file) {
+            if(ootrs && path.endsWith(".meta")){
+              // TODO
+            }
+
+            if(!ootrs && path == "categories.txt"){
+              // TODO
+            }
+
+            if(path.endsWith(".zbank")) usesCustomBank = true;
+            if(path.endsWith(".zsound")) usesCustomSamples = true;
+          });
+
+
+          $("#lbFormat").text(ootrs ? "OOTRS" : "MMRS");
+          $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
+          $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
+
+
+          // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
+
+          
+        // File doesn't have the zip format
+        }, function() {
+          alert("Not a valid zip file");
+          // TODO: ALERT (maybe a toast? snackbar?)
+        });
+      };
+
+    
+      async function submitForm(){
+        console.log("submitForm");
+
+        const octokit = new Octokit({
+          auth: authToken,
+        });
+
+        
+
+        // TODO: Get auth token
+        
+        // TODO: Collect the json file
+        
+        // TODO: Add this entry to the json file
+
+        // TODO: Send the file and the entry through the github API as a commit
+
+        // TODO: Do a pull request
+
+        // WOOOOORKS !!!
+        /*var result = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+          owner: 'CristobalPenaloza',
+          repo: 'Z64PackerTestRepo',
+          path: 'test1.txt',
+          message: 'Test 1',
+          committer: {
+            name: 'Cristóbal Peñaloza',
+            email: 'cristobal.tolin@gmail.com'
+          },
+          content: 'bXkgbmV3IGZpbGUgY29udGVudHM=',
+        });*/
+        console.log('Process finished');
+      }
+
+      $(function(){
+        $("#btnLogin").on("click", userLogin);
+        $("#btnSubmit").on("click", submitForm);
+        $("#fileUpload").on("change", processFile);
+      });
+    </script>
+
+    <div id="loadingOverlay" class="loading-overlay d-none">
+      <i class="fa-solid fa-spinner fa-spin-pulse fa-3x"></i>
+    </div>
+
+    <nav class="nav-shadow navbar fixed-top" style="padding-left: 8px; height: 46.5px;">
+      <a class="navbar-brand text-secondary" style="width: 242px" href="#">
+        Z64 Submission Form
+      </a>
+
+      <div class="col-auto ml-auto">
+        Logged as <b id="lbUsername">...</b>
+      </div>
+
+      <div class="col-auto px-0">
+        <img id="imgAvatar" class="rounded-circle" width="30" height="30" src="" />
+      </div>
+    </nav>
+
+    <div class="container" style="padding-top: 46.5px;">
+      <div class="row justify-content-md-center pt-5 pb-5">
+
+        <!-- AUTHORIZATION -->
+        <div class="card rounded col p-3" style="max-width: 500px;" id="panelAuthorization">
+          <h5>Authorization</h5>
+          <p>This tools works by using the GitHub API to create commits and pull requests for you.</p>
+
+          <div class="form-group">
+            <label>GitHub authorization token:</label>
+            <p class="hint">The token with access to the fork of the repository you are trying to send this file.</p>
+            <input type="text" id="txtGithubAuthToken" class="form-control" placeholder="github_pat_xxxxx... or ghp_xxxxx..." />
+          </div>
+
+          <button type="button" class="btn btn-success" id="btnLogin">Login</button>
+        </div>
+
+
+        <!-- SUBMISSION DETAILS -->
+        <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
+          <h5>Submission details</h5>
+    
+          <div class="form-group">
+            <label>File:</label>
+            <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" />
+            <p class="opacity-600 mb-0">
+              Information detected from the file:<br>
+              <b>• Format:</b> <span id="lbFormat">...</span><br>
+              <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
+              <b>• Sequence type:</b> <span id="lbInternalName">...</span><br>
+              <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
+              <b>• Categories:</b> <span id="lbCategories">...</span><br>
+              <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
+              <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
+            </p>
+          </div>
+
+          <hr>
+
+          <div class="form-group">
+            <label>Game name:</label>
+            <p class="hint">The name of the game your song comes from.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
+          </div>
+
+          <div class="form-group">
+            <label>Song name:</label>
+            <p class="hint">The actual name of the song.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
+          </div>
+
+          <div class="form-group">
+            <label>Composer(s):</label>
+            <p class="hint">A list of the names of the original composers of this song.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+          </div>
+
+          <div class="form-group">
+            <label>Converter(s):</label>
+            <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
+            <input type="text" class="form-control" placeholder="E.g.: Tolin" />
+          </div>
+
+          <div class="form-group">
+            <label>Song type:</label>
+            <p class="hint">
+              <b>• Background Music (BGM):</b> looping track, used as background music.<br>
+              <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
+            </p>
+            <select class="form-control">
+              <option>Background Music (BGM)</option>
+              <option>Fanfare</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Preview link:</label>
+            <p class="hint">
+              Link to a preview of this songs. Can it be on two formats:<br>
+              <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
+              <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
+            </p>
+            <input type="text" class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label>Notes:</label>
+            <input type="text" class="form-control" />
+          </div>
+
+          <button type="button" class="btn btn-success" id="btnSubmit">Submit</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
