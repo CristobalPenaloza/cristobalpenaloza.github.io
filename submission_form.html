@@ -57,6 +57,7 @@
 
       // Valid repos of the user:
       var repos = [];
+      var selectedRepo = null;
 
       async function userLogin(){
         try {
@@ -68,7 +69,6 @@
 
           // Get the token the user put
           var authToken = $("#txtGithubAuthToken").val();
-          console.log(authToken);
           const octokit = new Octokit({ auth: authToken });
 
           // Get the username of this token
@@ -79,54 +79,94 @@
           avatarUrl = user.data.avatar_url;
 
           // Load the user info
+          $("#niAvatar").removeClass("d-none");
           $("#imgAvatar").prop("src", avatarUrl);
+          $("#niUsername").removeClass("d-none");
           $("#lbUsername").text(username);
 
           // Get their repos
           var allRepos = await octokit.request('GET /users/{username}/repos', {
             username: username,
           });
-          console.log(allRepos);
           
           // Check all the repos to see which one are a z64 repo
           await Promise.all(allRepos.data.map(async (repo) => {
-            // Only use fork repos, because only those can pull-request
+
+            // If it's a fork, query the original repo
+            var originalRepoFullName = repo.full_name;
+            var originalRepoAvatarUrl = avatarUrl;
             if(repo.fork){
-              // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
-              var z64PropertiesLink = "https://raw.githubusercontent.com/" + repo.full_name + "/" + repo.default_branch + "/z64musicpacker.properties";
-              var response = await fetch(z64PropertiesLink);
-              
-              if(response.ok){
-                console.log(response);
-              }
+              var originalRepo = await octokit.request('GET /repos/{owner}/{repo}', {
+                owner: repo.owner.login,
+                repo: repo.name
+              });
+              originalRepoFullName = originalRepo.data.parent.full_name;
+              originalRepoAvatarUrl = originalRepo.data.parent.owner.avatar_url;
+            }
 
-              
-              return;
+            // Try to get the z64musicpacker.properties file from the original repo
+            // TODO: Consider reading this with the GitHub API, since raw.githubusercontent.com has a cache delay of 300 seconds (5 mins)
+            var z64PropertiesLink = "https://raw.githubusercontent.com/" + originalRepoFullName + "/" + repo.default_branch + "/z64musicpacker.properties";
+            var response = await fetch(z64PropertiesLink);
 
+            // TODO: Add version, and compatible files to z64musicpacker.properties
+            
+            // If we find a z64musicpacker.properties file, this is a compatible repo!
+            if(response.ok){
+              // Read the file
+              var properties = await response.json();
+              console.log(properties);
 
               // Load the repo into our list
               repos.push({
-                id: repo.id,
-                fullName: repo.full_name,
-                name: repo.name,
-                url: repo.url,
-                defaultBranch: repo.default_branch,
+                repoId: repo.id,
+                repoFullName: repo.full_name,
+                repoName: repo.name,
+                repoUrl: repo.url,
+                repoDefaultBranch: repo.default_branch,
+                repoIsFork: repo.fork, // <-- Make this tool also available for repo owners
 
-                // Z64 music packer properties
-                
+                originalRepoFullName: originalRepoFullName,
+                originalRepoAvatarUrl: originalRepoAvatarUrl,
+
+                // Import Z64 music packer properties
+                ...properties,
               });
             }
           }));
 
-          
-          
+          // Check if we have z64 fork repos available
+          if(repos.length == 0){
+            alert("No Z64 repos found for this account!");
+            $("#loadingOverlay").addClass("d-none");
+            return;
 
-          
+          } else{
+            // Add the repos as buttons
+            repos.forEach((repo, i) => {
+              $("#containerRepo").append(
+                `<button type="button" class="btn btn-outline-dark w-100 mb-3" id="btnSelectRepo${i}">
+                  <div class="row">
+                    <img class="rounded-circle ml-3" width="45" height="45" src="${repo.originalRepoAvatarUrl}" />
+                    <div class="col text-left">
+                      <h5 class="mb-0">${repo.name}</h5>
+                      <span class="opacity-500">${repo.description}</span>
+                    </div>
+                  </div>
+                </button>`
+              );
+              $(`#btnSelectRepo${i}`).on("click", function(){
+                selectedRepo = repo;
+                $("#panelRepoSelection").addClass("d-none");
+                $("#panelSubmissionDetails").removeClass("d-none");
+              });
+            });
 
-          // Once we finish, we change form and stop the loading
-          $("#loadingOverlay").addClass("d-none");
-          $("#panelAuthorization").addClass("d-none");
-          $("#panelSubmissionDetails").removeClass("d-none");
+            // Once we finish, we change form and stop the loading
+            $("#loadingOverlay").addClass("d-none");
+            $("#panelAuthorization").addClass("d-none");
+            $("#panelRepoSelection").removeClass("d-none");
+          }
 
           // If we catch an error, show it to the user
           // TODO: USE A MORE USER-FRIENDLY WAY TO SHOW THE ERROR
@@ -235,12 +275,12 @@
       <a class="navbar-brand text-secondary" style="width: 242px" href="#">
         Z64 Submission Form
       </a>
-
-      <div class="col-auto ml-auto">
+      
+      <div class="col-auto ml-auto d-none" id="niUsername">
         Logged as <b id="lbUsername">...</b>
       </div>
 
-      <div class="col-auto px-0">
+      <div class="col-auto px-0 d-none" id="niAvatar">
         <img id="imgAvatar" class="rounded-circle" width="30" height="30" src="" />
       </div>
     </nav>
@@ -263,9 +303,31 @@
         </div>
 
 
+        <!-- SELECT A REPO -->
+        <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelRepoSelection">
+          <h5>Select a repository</h5>
+          <p>Select the repository you will be submitting a new music track.</p>
+          <div class="container" id="containerRepo">
+            <!--<button type="button" class="btn btn-outline-dark w-100 mb-3">
+              <div class="row">
+                <img id="imgAvatar" class="rounded-circle ml-3" width="45" height="45" src="" />
+                <div class="col text-left">
+                  <h5>Repo Name</h5>
+                  <span class="opacity-500">Description! Description!</span>
+                </div>
+              </div>
+            </button>-->
+          </div>
+        </div>
+
+
         <!-- SUBMISSION DETAILS -->
         <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
           <h5>Submission details</h5>
+
+          <div class="form-group">
+            
+          </div>
     
           <div class="form-group">
             <label>File:</label>
