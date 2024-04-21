@@ -93,28 +93,36 @@
           await Promise.all(allRepos.data.map(async (repo) => {
 
             // If it's a fork, query the original repo
-            var originalRepoFullName = repo.full_name;
+            var originalRepoOwner = repo.owner.login;
             var originalRepoAvatarUrl = avatarUrl;
             if(repo.fork){
               var originalRepo = await octokit.request('GET /repos/{owner}/{repo}', {
                 owner: repo.owner.login,
                 repo: repo.name
               });
-              originalRepoFullName = originalRepo.data.parent.full_name;
+              originalRepoOwner = originalRepo.data.parent.owner.login;
               originalRepoAvatarUrl = originalRepo.data.parent.owner.avatar_url;
             }
 
             // Try to get the z64musicpacker.properties file from the original repo
-            // TODO: Consider reading this with the GitHub API, since raw.githubusercontent.com has a cache delay of 300 seconds (5 mins)
-            var z64PropertiesLink = "https://raw.githubusercontent.com/" + originalRepoFullName + "/" + repo.default_branch + "/z64musicpacker.properties";
-            var response = await fetch(z64PropertiesLink);
+            // We don't use raw.githubusercontent.com, since it has a cache delay of 300 seconds (5 mins) that can cause issues
+            //var z64PropertiesLink = "https://raw.githubusercontent.com/" + originalRepoFullName + "/" + repo.default_branch + "/z64musicpacker.properties";
+            //var response = await fetch(z64PropertiesLink);
+            var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: originalRepoOwner,
+              repo: repo.name,
+              path: "z64musicpacker.properties"
+
+            }).catch((error) => {
+              //console.log(`${repo.name} is not a z64 repo`);
+            });
 
             // TODO: Add version, and compatible files to z64musicpacker.properties
             
             // If we find a z64musicpacker.properties file, this is a compatible repo!
-            if(response.ok){
+            if(response !== undefined){
               // Read the file
-              var properties = await response.json();
+              var properties = JSON.parse(atob(response.data.content));
               console.log(properties);
 
               // Load the repo into our list
@@ -126,7 +134,7 @@
                 repoDefaultBranch: repo.default_branch,
                 repoIsFork: repo.fork, // <-- Make this tool also available for repo owners
 
-                originalRepoFullName: originalRepoFullName,
+                originalRepoOwner: originalRepoOwner,
                 originalRepoAvatarUrl: originalRepoAvatarUrl,
 
                 // Import Z64 music packer properties
@@ -159,6 +167,7 @@
                 selectedRepo = repo;
                 $("#panelRepoSelection").addClass("d-none");
                 $("#panelSubmissionDetails").removeClass("d-none");
+                loadForm();
               });
             });
 
@@ -177,67 +186,97 @@
       }
 
       function loadForm(){
-        
-
-        // Load the repo list
-
         // TODO: LOAD SPECIFIC REPO STUFF...
+
       }
 
       function processFile(event) {
+        // Read the file as a zip file
+        // https://stuk.github.io/jszip/documentation/api_jszip.html
         var file = event.target.files[0];
-        var zip = new JSZip(); // https://stuk.github.io/jszip/documentation/api_jszip.html
+        var zip = new JSZip();
+
         zip.loadAsync(file).then(function(zip) {
+
           // If it's not a valid file, we just stop the process here
           var ootrs = file.name.endsWith(".ootrs");
-          if(!ootrs && !file.name.endsWith(".mmrs")) return;
+          if(!ootrs && !file.name.endsWith(".mmrs")) {
+            alert("Not a valid z64 file (ootrs, mmrs)");
+            $("#fileUpload").val("");
+            $("#pInformationFromFile").addClass("d-none");
+            return;
+          }
           
           var usesCustomBank = false;
           var usesCustomSamples = false;
 
           // Run over each file and extract data
           zip.forEach(function(path, file) {
+
+            // Read the OOTRS-only meta file
             if(ootrs && path.endsWith(".meta")){
-              // TODO
+              file.async("text").then(function(text) {
+                var lines = text.split("\n");
+                lines.forEach((line, i) => {
+                  switch(i){
+                    case 0: $("#lbInternalName").text(line); break;
+                    case 2: $("#lbSequenceType").text(line); break;
+                    case 3: $("#lbMusicGroups").text(line); break;
+                  }
+                });
+              });
             }
 
+            // Read the MMRS-only categories file
             if(!ootrs && path == "categories.txt"){
-              // TODO
+              file.async("text").then(function(text) {
+                $("#lbCategories").text(text);
+              });
             }
 
+            // Check custom bank and samples
             if(path.endsWith(".zbank")) usesCustomBank = true;
             if(path.endsWith(".zsound")) usesCustomSamples = true;
           });
 
-
+          // Load the info for both file types
           $("#lbFormat").text(ootrs ? "OOTRS" : "MMRS");
           $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
           $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
 
+          // Toggle the info only for each file type
+          $("#lbOOTRSOnlyInfo").toggleClass("d-none", !ootrs);
+          $("#lbMMRSOnlyInfo").toggleClass("d-none", ootrs);
+
+          // Show the information
+          $("#pInformationFromFile").removeClass("d-none");
 
           // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
+          // If needed tho...
 
           
         // File doesn't have the zip format
         }, function() {
           alert("Not a valid zip file");
-          // TODO: ALERT (maybe a toast? snackbar?)
+          $("#pInformationFromFile").addClass("d-none");
+          $("#fileUpload").val("");
         });
       };
 
     
       async function submitForm(){
         console.log("submitForm");
+        const octokit = new Octokit({ auth: authToken });
+        
+        // Collect the json file
+        var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+          owner: username,
+          repo: selectedRepo.name,
+          path: "z64musicpacker.properties"
 
-        const octokit = new Octokit({
-          auth: authToken,
+        }).catch((error) => {
+          //console.log(`${repo.name} is not a z64 repo`);
         });
-
-        
-
-        // TODO: Get auth token
-        
-        // TODO: Collect the json file
         
         // TODO: Add this entry to the json file
 
@@ -324,21 +363,21 @@
         <!-- SUBMISSION DETAILS -->
         <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
           <h5>Submission details</h5>
-
-          <div class="form-group">
-            
-          </div>
     
           <div class="form-group">
             <label>File:</label>
             <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" />
-            <p class="opacity-600 mb-0">
-              Information detected from the file:<br>
+            <p class="opacity-600 mb-0 d-none" id="pInformationFromFile">
+              Information extracted from the file:<br>
               <b>• Format:</b> <span id="lbFormat">...</span><br>
-              <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
-              <b>• Sequence type:</b> <span id="lbInternalName">...</span><br>
-              <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
-              <b>• Categories:</b> <span id="lbCategories">...</span><br>
+              <span id="lbOOTRSOnlyInfo">
+                <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
+                <b>• Sequence type:</b> <span id="lbSequenceType">...</span><br>
+                <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
+              </span>
+              <span id="lbMMRSOnlyInfo">
+                <b>• Categories:</b> <span id="lbCategories">...</span><br>
+              </span>
               <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
               <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
             </p>
@@ -349,25 +388,13 @@
           <div class="form-group">
             <label>Game name:</label>
             <p class="hint">The name of the game your song comes from.</p>
-            <input type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
+            <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
           </div>
 
           <div class="form-group">
             <label>Song name:</label>
             <p class="hint">The actual name of the song.</p>
-            <input type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
-          </div>
-
-          <div class="form-group">
-            <label>Composer(s):</label>
-            <p class="hint">A list of the names of the original composers of this song.</p>
-            <input type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
-          </div>
-
-          <div class="form-group">
-            <label>Converter(s):</label>
-            <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
-            <input type="text" class="form-control" placeholder="E.g.: Tolin" />
+            <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
           </div>
 
           <div class="form-group">
@@ -376,28 +403,47 @@
               <b>• Background Music (BGM):</b> looping track, used as background music.<br>
               <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
             </p>
-            <select class="form-control">
+            <select id="ddlSongType" class="form-control">
               <option>Background Music (BGM)</option>
               <option>Fanfare</option>
             </select>
           </div>
 
+          <hr>
+
+          <div class="form-group">
+            <label>Composer(s):</label>
+            <p class="hint">A list of the names of the original composers of this song.</p>
+            <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+          </div>
+
+          <div class="form-group">
+            <label>Converter(s):</label>
+            <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
+            <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin" />
+          </div>
+
+          <hr>
+
           <div class="form-group">
             <label>Preview link:</label>
             <p class="hint">
-              Link to a preview of this songs. Can it be on two formats:<br>
+              Link to a preview of this song. Can it be on two formats:<br>
               <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
               <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
             </p>
-            <input type="text" class="form-control" />
+            <input id="txtPreviewLink" type="text" class="form-control" />
           </div>
 
           <div class="form-group">
             <label>Notes:</label>
-            <input type="text" class="form-control" />
+            <p class="hint">
+              Additional notes for the people handling your submission.
+            </p>
+            <input id="txtNotes" type="text" class="form-control" />
           </div>
 
-          <button type="button" class="btn btn-success" id="btnSubmit">Submit</button>
+          <button id="btnSubmit" type="button" class="btn btn-success">Submit</button>
         </div>
       </div>
     </div>
