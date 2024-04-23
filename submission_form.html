@@ -46,8 +46,10 @@
 
     <script type="module">
       import { Octokit, App } from "https://esm.sh/octokit";
+      import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
 
       var authToken = "";
+      var fileBase64 = "";
 
       // Info about the user:
       var username = "";
@@ -58,6 +60,8 @@
       // Valid repos of the user:
       var repos = [];
       var selectedRepo = null;
+      var database = [];
+      var databaseSha = "";
 
       async function userLogin(){
         try {
@@ -68,7 +72,7 @@
           $("#loadingOverlay").removeClass("d-none");
 
           // Get the token the user put
-          var authToken = $("#txtGithubAuthToken").val();
+          authToken = $("#txtGithubAuthToken").val();
           const octokit = new Octokit({ auth: authToken });
 
           // Get the username of this token
@@ -106,8 +110,6 @@
 
             // Try to get the z64musicpacker.properties file from the original repo
             // We don't use raw.githubusercontent.com, since it has a cache delay of 300 seconds (5 mins) that can cause issues
-            //var z64PropertiesLink = "https://raw.githubusercontent.com/" + originalRepoFullName + "/" + repo.default_branch + "/z64musicpacker.properties";
-            //var response = await fetch(z64PropertiesLink);
             var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
               owner: originalRepoOwner,
               repo: repo.name,
@@ -128,7 +130,6 @@
               // Load the repo into our list
               repos.push({
                 repoId: repo.id,
-                repoFullName: repo.full_name,
                 repoName: repo.name,
                 repoUrl: repo.url,
                 repoDefaultBranch: repo.default_branch,
@@ -164,10 +165,7 @@
                 </button>`
               );
               $(`#btnSelectRepo${i}`).on("click", function(){
-                selectedRepo = repo;
-                $("#panelRepoSelection").addClass("d-none");
-                $("#panelSubmissionDetails").removeClass("d-none");
-                loadForm();
+                selectRepo(repo);
               });
             });
 
@@ -185,124 +183,298 @@
         }
       }
 
-      function loadForm(){
-        // TODO: LOAD SPECIFIC REPO STUFF...
+      async function selectRepo(repo){
+        selectedRepo = repo;
+        console.log(selectedRepo);
+        $("#loadingOverlay").removeClass("d-none");
+        
+        // Try to sync the repo and collect the database... we need it for the form
+        var err = await syncRepoAndGetLatestDatabase();
+        if(err != null){
+          alert(err);
 
+        } else{
+          // We synced and got the db! Now we load the form
+          $("#panelRepoSelection").addClass("d-none");
+          $("#panelSubmissionDetails").removeClass("d-none");
+        }
+
+        $("#loadingOverlay").addClass("d-none");
       }
 
-      function processFile(event) {
+
+
+      async function syncRepoAndGetLatestDatabase(){
+        const octokit = new Octokit({ auth: authToken });
+        var error = null;
+        database = [];
+        
+
+        // First, if the current repo is a fork, we try to sync to the latest commit
+        if(selectedRepo.repoIsFork){
+          var syncResponse = await octokit.request('POST /repos/{owner}/{repo}/merge-upstream', {
+            owner: username,
+            repo: selectedRepo.repoName,
+            branch: selectedRepo.repoDefaultBranch
+          }).catch((err) =>{
+            error = `Couldn't sync fork to the latest commit: ${err}`;
+          });
+          console.log(syncResponse);
+          if(syncResponse === undefined) return error;
+        }
+        
+        
+        // Collect the database json file
+        var dbResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+          owner: username,
+          repo: selectedRepo.repoName,
+          path: selectedRepo.database
+        }).catch((err) => {
+          error = `Couldn't get database file from the repo: ${err}`;
+        });
+        if(dbResponse === undefined) return error;
+        console.log(dbResponse);
+
+        // Load the database
+        database = JSON.parse(atob(dbResponse.data.content));
+        databaseSha = dbResponse.data.sha;
+        console.log("Database loaded!");
+        console.log(database);
+      }
+
+
+
+      async function processFile(event) {
         // Read the file as a zip file
         // https://stuk.github.io/jszip/documentation/api_jszip.html
-        var file = event.target.files[0];
-        var zip = new JSZip();
+        try{
+          $("#loadingOverlay").removeClass("d-none");
+          var file = event.target.files[0];
+          fileBase64 = (await toBase64(file)).split(",").pop();
+          //console.log("File processed: " + fileBase64);
 
-        zip.loadAsync(file).then(function(zip) {
+          // Open the file as a zip
+          var zip = new JSZip();
+          zip.loadAsync(file).then(function(zip) {
 
-          // If it's not a valid file, we just stop the process here
-          var ootrs = file.name.endsWith(".ootrs");
-          if(!ootrs && !file.name.endsWith(".mmrs")) {
-            alert("Not a valid z64 file (ootrs, mmrs)");
-            $("#fileUpload").val("");
-            $("#pInformationFromFile").addClass("d-none");
-            return;
-          }
-          
-          var usesCustomBank = false;
-          var usesCustomSamples = false;
+            // If it's not a valid file, we just stop the process here
+            var ootrs = file.name.endsWith(".ootrs");
+            if(!ootrs && !file.name.endsWith(".mmrs")) {
+              alert("Not a valid z64 file (ootrs, mmrs)");
+              $("#fileUpload").val("");
+              $("#pInformationFromFile").addClass("d-none");
+              return;
+            }
+            
+            var usesCustomBank = false;
+            var usesCustomSamples = false;
 
-          // Run over each file and extract data
-          zip.forEach(function(path, file) {
+            // Run over each file and extract data
+            zip.forEach(function(path, file) {
 
-            // Read the OOTRS-only meta file
-            if(ootrs && path.endsWith(".meta")){
-              file.async("text").then(function(text) {
-                var lines = text.split("\n");
-                lines.forEach((line, i) => {
-                  switch(i){
-                    case 0: $("#lbInternalName").text(line); break;
-                    case 2: $("#lbSequenceType").text(line); break;
-                    case 3: $("#lbMusicGroups").text(line); break;
-                  }
+              // Read the OOTRS-only meta file
+              if(ootrs && path.endsWith(".meta")){
+                file.async("text").then(function(text) {
+                  var lines = text.split("\n");
+                  lines.forEach((line, i) => {
+                    switch(i){
+                      case 0: $("#lbInternalName").text(line); break;
+                      case 2: $("#lbSequenceType").text(line); break;
+                      case 3: $("#lbMusicGroups").text(line); break;
+                    }
+                  });
                 });
-              });
-            }
+              }
 
-            // Read the MMRS-only categories file
-            if(!ootrs && path == "categories.txt"){
-              file.async("text").then(function(text) {
-                $("#lbCategories").text(text);
-              });
-            }
+              // Read the MMRS-only categories file
+              if(!ootrs && path == "categories.txt"){
+                file.async("text").then(function(text) {
+                  $("#lbCategories").text(text);
+                });
+              }
 
-            // Check custom bank and samples
-            if(path.endsWith(".zbank")) usesCustomBank = true;
-            if(path.endsWith(".zsound")) usesCustomSamples = true;
+              // Check custom bank and samples
+              if(path.endsWith(".zbank")) usesCustomBank = true;
+              if(path.endsWith(".zsound")) usesCustomSamples = true;
+            });
+
+            // Load the info for both file types
+            $("#lbFormat").text(ootrs ? "OOTRS" : "MMRS");
+            $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
+            $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
+
+            // Toggle the info only for each file type
+            $("#lbOOTRSOnlyInfo").toggleClass("d-none", !ootrs);
+            $("#lbMMRSOnlyInfo").toggleClass("d-none", ootrs);
+
+            // Show the information
+            $("#pInformationFromFile").removeClass("d-none");
+
+            // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
+            // If needed tho...
+
+            $("#loadingOverlay").addClass("d-none");
+
+            
+          // File doesn't have the zip format
+          }, function() {
+            alert("Not a valid zip file");
+            clearFileInput();
           });
 
-          // Load the info for both file types
-          $("#lbFormat").text(ootrs ? "OOTRS" : "MMRS");
-          $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
-          $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
+        } catch(e){
+          alert(`Couldn't process the file: ${e}`);
+          clearFileInput();
+        }
+      }
+      function clearFileInput(){
+        fileBase64 = "";
+        $("#pInformationFromFile").addClass("d-none");
+        $("#fileUpload").val("");
+        $("#loadingOverlay").addClass("d-none");
+      }
+      const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+      });
 
-          // Toggle the info only for each file type
-          $("#lbOOTRSOnlyInfo").toggleClass("d-none", !ootrs);
-          $("#lbMMRSOnlyInfo").toggleClass("d-none", ootrs);
-
-          // Show the information
-          $("#pInformationFromFile").removeClass("d-none");
-
-          // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
-          // If needed tho...
-
-          
-        // File doesn't have the zip format
-        }, function() {
-          alert("Not a valid zip file");
-          $("#pInformationFromFile").addClass("d-none");
-          $("#fileUpload").val("");
-        });
-      };
 
     
+      // TODO: MANAGE EDITS OF FILES
       async function submitForm(){
-        console.log("submitForm");
         const octokit = new Octokit({ auth: authToken });
-        
-        // Collect the json file
-        var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-          owner: username,
-          repo: selectedRepo.name,
-          path: "z64musicpacker.properties"
+        $("#loadingOverlay").removeClass("d-none");
 
-        }).catch((error) => {
-          //console.log(`${repo.name} is not a z64 repo`);
+        // Get the latest database
+        var syncError = await syncRepoAndGetLatestDatabase();
+        if(syncError != null){
+          alert(syncError);
+          $("#loadingOverlay").addClass("d-none");
+          return;
+        }
+        
+
+        // Create the new entry
+        var entry = {
+          game: $("#txtGameName").val(),
+          song: $("#txtSongName").val(),
+          type: $("#ddlSongType").val(),
+          composers: $("#txtComposers").val(),
+          converters: $("#txtConverters").val(),
+          preview: $("#txtPreviewLink").val(),
+
+          categories: $("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text(),
+          usesCustomBank: $("lbUsesCustomBank").text() == "Yes",
+          usesCustomSamples: $("lbUsesCustomSamples").text() == "Yes",
+          
+          uuid: crypto.randomUUID(),
+        };
+
+
+        // Generate a local path for the entry
+        var extension = $("#lbFormat").text().toLowerCase();
+        var fileLocalPath = entry.game + "/" + entry.song + "." + extension;
+        var finalPath = selectedRepo.binaries + fileLocalPath;
+        entry.file = fileLocalPath;
+        console.log(entry);
+
+
+        // Add this entry to the json file
+        database.push(entry);
+
+
+        // Upload the file
+        // Again, this doesn't work with the octokit, so we using normal fetch again
+        /*var uploadFileResult = await fetch(`https://api.github.com/repos/${username}/${selectedRepo.repoName}/contents/${finalPath}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            message: `Add new file ${fileLocalPath}`,
+            content: fileBase64
+          }),
+          headers: {
+            "Accept": "application/vnd.github+json",
+            "Authorization": `Bearer ${authToken}`,
+            "X-GitHub-Api-Version": "2022-11-28"
+          }
         });
+        if(uploadFileResult.ok != true){
+          alert(`Couldn't upload the new file (${finalPath}) to the repo: ${(await uploadFileResult.json()).message}`);
+          $("#loadingOverlay").addClass("d-none");
+          return;
+        }
+        console.log(uploadFileResult);*/
+
+        var uploadFileResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+          owner: username,
+          repo: selectedRepo.repoName,
+          path: finalPath,
+          message: `Add new file ${fileLocalPath}`,
+          content: fileBase64,
+          
+        }).catch((err) => {
+          alert(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
+        });
+        if(uploadFileResult === undefined) {
+          $("#loadingOverlay").addClass("d-none");
+          return;
+        }
+        console.log(uploadFileResult);
+
+
+        // Update the database
+        var updateDatabaseResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+          owner: username,
+          repo: selectedRepo.repoName,
+          path: selectedRepo.database,
+          message: `Add entry in database for file ${fileLocalPath}`,
+          content: btoa(database), // <-- TODO: THIS RETURNS [object Object]
+          sha: databaseSha
+          
+        }).catch((err) => {
+          alert(`Couldn't update database (${selectedRepo.database}) on the repo: ${err}`);
+        });
+        if(updateDatabaseResult === undefined) {
+          $("#loadingOverlay").addClass("d-none");
+          return;
+        }
+        console.log(updateDatabaseResult);
+
+
+        // Do a pull request with the newly added files
+        // ERROR HERE: NO COMMITS BETWEEN MAIN AND MAIN
+        if(selectedRepo.repoIsFork){
+          var additionalNotes = $("#txtNotes").val();
+          await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+            owner: username,
+            repo: selectedRepo.repoName,
+            title: `Add new song: ${entry.game} - ${entry.song}`,
+            body: `Automatic PR created with Z64 Submission Form\n\nAdditional notes: ${additionalNotes}`,
+            head: selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
+            base: selectedRepo.repoDefaultBranch,
+
+          }).catch((err) => {
+            alert(`Couldn't create a pull request: ${err}`);
+          });
+        }
         
-        // TODO: Add this entry to the json file
 
-        // TODO: Send the file and the entry through the github API as a commit
-
-        // TODO: Do a pull request
-
-        // WOOOOORKS !!!
-        /*var result = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
-          owner: 'CristobalPenaloza',
-          repo: 'Z64PackerTestRepo',
-          path: 'test1.txt',
-          message: 'Test 1',
-          committer: {
-            name: 'Cristóbal Peñaloza',
-            email: 'cristobal.tolin@gmail.com'
-          },
-          content: 'bXkgbmV3IGZpbGUgY29udGVudHM=',
-        });*/
         console.log('Process finished');
+        $("#loadingOverlay").addClass("d-none");
       }
+
+
 
       $(function(){
         $("#btnLogin").on("click", userLogin);
         $("#btnSubmit").on("click", submitForm);
         $("#fileUpload").on("change", processFile);
+
+        $("#ddlSubmissionType").on("change", function(){
+          $("#mainForm").toggleClass("d-none", this.value != "new")
+          // TODO: ADD SELECT FOR CHOOSING THE SONG TO EDIT | this.value == "edit"
+        });
       });
     </script>
 
@@ -363,87 +535,103 @@
         <!-- SUBMISSION DETAILS -->
         <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
           <h5>Submission details</h5>
-    
-          <div class="form-group">
-            <label>File:</label>
-            <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" />
-            <p class="opacity-600 mb-0 d-none" id="pInformationFromFile">
-              Information extracted from the file:<br>
-              <b>• Format:</b> <span id="lbFormat">...</span><br>
-              <span id="lbOOTRSOnlyInfo">
-                <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
-                <b>• Sequence type:</b> <span id="lbSequenceType">...</span><br>
-                <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
-              </span>
-              <span id="lbMMRSOnlyInfo">
-                <b>• Categories:</b> <span id="lbCategories">...</span><br>
-              </span>
-              <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
-              <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
-            </p>
-          </div>
-
-          <hr>
 
           <div class="form-group">
-            <label>Game name:</label>
-            <p class="hint">The name of the game your song comes from.</p>
-            <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
-          </div>
-
-          <div class="form-group">
-            <label>Song name:</label>
-            <p class="hint">The actual name of the song.</p>
-            <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
-          </div>
-
-          <div class="form-group">
-            <label>Song type:</label>
-            <p class="hint">
-              <b>• Background Music (BGM):</b> looping track, used as background music.<br>
-              <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
-            </p>
-            <select id="ddlSongType" class="form-control">
-              <option>Background Music (BGM)</option>
-              <option>Fanfare</option>
+            <label>Submission type:</label>
+            <select id="ddlSubmissionType" class="form-control">
+              <option value="">Select an option...</option>
+              <option value="new">Upload a new song</option>
+              <option value="edit">Modify/update existing song</option>
             </select>
           </div>
 
-          <hr>
+          <!--TODO: Add typeahead for choosing the existing track on edit mode-->
 
-          <div class="form-group">
-            <label>Composer(s):</label>
-            <p class="hint">A list of the names of the original composers of this song.</p>
-            <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+          <div id="mainForm" class="d-none">
+            <div class="form-group">
+              <label>File:</label>
+              <p class="hint">The z64 song file you are uploading (ootrs, mmrs). If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded file.</p>
+              <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" />
+              <p class="opacity-600 mb-0 d-none" id="pInformationFromFile">
+                Information extracted from the file:<br>
+                <b>• Format:</b> <span id="lbFormat">...</span><br>
+                <span id="lbOOTRSOnlyInfo">
+                  <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
+                  <b>• Sequence type:</b> <span id="lbSequenceType">...</span><br>
+                  <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
+                </span>
+                <span id="lbMMRSOnlyInfo">
+                  <b>• Categories:</b> <span id="lbCategories">...</span><br>
+                </span>
+                <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
+                <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
+              </p>
+            </div>
+  
+            <hr>
+  
+            <div class="form-group">
+              <label>Game name:</label>
+              <p class="hint">The name of the game your song comes from.</p>
+              <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
+            </div>
+  
+            <!--TODO: Make sure in new mode, we are not using an existing track's name-->
+            <div class="form-group">
+              <label>Song name:</label>
+              <p class="hint">The actual name of the song.</p>
+              <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
+            </div>
+  
+            <div class="form-group">
+              <label>Song type:</label>
+              <p class="hint">
+                <b>• Background Music (BGM):</b> looping track, used as background music.<br>
+                <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
+              </p>
+              <select id="ddlSongType" class="form-control">
+                <option value="bgm">Background Music (BGM)</option>
+                <option value="fanfare">Fanfare</option>
+              </select>
+            </div>
+  
+            <hr>
+  
+            <div class="form-group">
+              <label>Composer(s):</label>
+              <p class="hint">A list of the names of the original composers of this song.</p>
+              <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+            </div>
+  
+            <div class="form-group">
+              <label>Converter(s):</label>
+              <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
+              <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin" />
+            </div>
+  
+            <hr>
+  
+            <div class="form-group">
+              <label>Preview link:</label>
+              <p class="hint">
+                Link to a preview of this song. Can it be on two formats:<br>
+                <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
+                <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
+              </p>
+              <input id="txtPreviewLink" type="text" class="form-control" />
+            </div>
+  
+            <div class="form-group">
+              <label>Notes:</label>
+              <p class="hint">
+                Additional notes for the people handling your submission.
+              </p>
+              <input id="txtNotes" type="text" class="form-control" />
+            </div>
+  
+            <button id="btnSubmit" type="button" class="btn btn-success">Submit</button>
           </div>
-
-          <div class="form-group">
-            <label>Converter(s):</label>
-            <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
-            <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin" />
-          </div>
-
-          <hr>
-
-          <div class="form-group">
-            <label>Preview link:</label>
-            <p class="hint">
-              Link to a preview of this song. Can it be on two formats:<br>
-              <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
-              <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
-            </p>
-            <input id="txtPreviewLink" type="text" class="form-control" />
-          </div>
-
-          <div class="form-group">
-            <label>Notes:</label>
-            <p class="hint">
-              Additional notes for the people handling your submission.
-            </p>
-            <input id="txtNotes" type="text" class="form-control" />
-          </div>
-
-          <button id="btnSubmit" type="button" class="btn btn-success">Submit</button>
+          
         </div>
       </div>
     </div>
