@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html data-theme='dark'>
+<html data-bs-theme="dark">
   <head>
     <!-- CSS -->
-    <link rel="stylesheet" type="text/css" href="css/themes.css" />
-    <link rel="stylesheet" type="text/css" href="css/bootstrap-themed.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
 
     <!-- JQuery -->
@@ -13,6 +12,8 @@
 
     <!-- Other stuff -->
     <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.alphanum/1.0.24/jquery.alphanum.min.js"></script>
+    <script src="js/typeahead.bundle.js"></script>
   </head>
   <body>
     <style>
@@ -22,16 +23,15 @@
         height: 100%;
         top: 0;
         left: 0;
-        color: var(--primary-normal);
-        background-color: var(--loading-overlay-backdrop-color);
+        color: var(--bs-primary-text-emphasis);
+        background-color: rgba(24, 24, 24, .6);
         z-index: 5600;
       }
       .loading-overlay i{
-          position: absolute;
-          top: 47%;
-          left: 47%;
+        position: absolute;
+        top: 47%;
+        left: 47%;
       }
-
       label{
         margin-bottom: .1rem;
       }
@@ -41,6 +41,30 @@
         margin-bottom: .25rem;
         font-size: 80%;
         opacity: .5;
+      }
+
+
+      .tt-hint{
+        opacity: .4 !important;
+      }
+      .tt-menu{
+        width: 100%;
+        background-color: var(--bs-body-bg);
+        border: var(--bs-card-border-width) solid var(--bs-primary-text-emphasis);
+        padding: .5rem;
+        border-radius: var(--bs-border-radius);
+        margin-top: .25rem;
+      }
+      .tt-suggestion{
+        padding: .25rem;
+      }
+      .tt-suggestion.tt-cursor, .tt-suggestion:hover{
+        background-color: var(--bs-primary);
+        color: white;
+        cursor: pointer;
+      }
+      .twitter-typeahead {
+        width: 100%;
       }
     </style>
 
@@ -154,10 +178,10 @@
             // Add the repos as buttons
             repos.forEach((repo, i) => {
               $("#containerRepo").append(
-                `<button type="button" class="btn btn-outline-dark w-100 mb-3" id="btnSelectRepo${i}">
+                `<button type="button" class="btn btn-outline-light w-100 mb-3" id="btnSelectRepo${i}">
                   <div class="row">
-                    <img class="rounded-circle ml-3" width="45" height="45" src="${repo.originalRepoAvatarUrl}" />
-                    <div class="col text-left">
+                    <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.originalRepoAvatarUrl}" />
+                    <div class="col text-start">
                       <h5 class="mb-0">${repo.name}</h5>
                       <span class="opacity-500">${repo.description}</span>
                     </div>
@@ -185,7 +209,6 @@
 
       async function selectRepo(repo){
         selectedRepo = repo;
-        console.log(selectedRepo);
         $("#loadingOverlay").removeClass("d-none");
         
         // Try to sync the repo and collect the database... we need it for the form
@@ -202,8 +225,6 @@
         $("#loadingOverlay").addClass("d-none");
       }
 
-
-
       async function syncRepoAndGetLatestDatabase(){
         const octokit = new Octokit({ auth: authToken });
         var error = null;
@@ -219,7 +240,6 @@
           }).catch((err) =>{
             error = `Couldn't sync fork to the latest commit: ${err}`;
           });
-          console.log(syncResponse);
           if(syncResponse === undefined) return error;
         }
         
@@ -233,11 +253,34 @@
           error = `Couldn't get database file from the repo: ${err}`;
         });
         if(dbResponse === undefined) return error;
-        console.log(dbResponse);
 
         // Load the database
-        database = JSON.parse(atob(dbResponse.data.content));
-        databaseSha = dbResponse.data.sha;
+        try{
+          database = JSON.parse(atob(dbResponse.data.content));
+          databaseSha = dbResponse.data.sha;
+
+        } catch(e){
+          alert(`Couldn't process database file, it could be corrupted: ${e}.\n\nThe process will continue, but the database will be remade.`);
+          database = [];
+          databaseSha = dbResponse.data.sha;
+          return;
+        }
+
+        // Now that we are loaded, fill up the required forms
+        var games = new Bloodhound({
+          datumTokenizer: Bloodhound.tokenizers.whitespace,
+          queryTokenizer: Bloodhound.tokenizers.whitespace,
+          local: [...new Set(database.map((d) => d.game))],
+        });
+        $("#txtGameName").typeahead({
+          hint: true,
+          highlight: true, /* Enable substring highlighting */
+          minLength: 1, /* Specify minimum characters required for showing suggestions */
+        }, {
+          name: 'games',
+          source: games,
+        });
+
         console.log("Database loaded!");
         console.log(database);
       }
@@ -341,13 +384,37 @@
       });
 
 
+
+      function clearForm(){
+        clearFileInput();
+        $("#txtGameName").val("");
+        $("#txtSongName").val("");
+        $("#ddlSongType").val("bgm");
+        $("#txtComposers").val("");
+        $("#txtConverters").val("");
+        $("#txtPreviewLink").val("");
+        $("#txtNotes").val("");
+        $("#mainForm").removeClass("was-validated");
+      }
+
+
     
-      // TODO: MANAGE EDITS OF FILES
       async function submitForm(){
+
+        // Check if the form is valid first
+        var form = $("#mainForm")[0];
+        var formIsValid = form.checkValidity();
+        $("#mainForm").addClass("was-validated");
+        if(!formIsValid) return;
+
+
+        // Open octokit and trigger the overlay
         const octokit = new Octokit({ auth: authToken });
         $("#loadingOverlay").removeClass("d-none");
 
+
         // Get the latest database
+        // Is this new one required?
         var syncError = await syncRepoAndGetLatestDatabase();
         if(syncError != null){
           alert(syncError);
@@ -384,28 +451,8 @@
         // Add this entry to the json file
         database.push(entry);
 
-
-        // Upload the file
-        // Again, this doesn't work with the octokit, so we using normal fetch again
-        /*var uploadFileResult = await fetch(`https://api.github.com/repos/${username}/${selectedRepo.repoName}/contents/${finalPath}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            message: `Add new file ${fileLocalPath}`,
-            content: fileBase64
-          }),
-          headers: {
-            "Accept": "application/vnd.github+json",
-            "Authorization": `Bearer ${authToken}`,
-            "X-GitHub-Api-Version": "2022-11-28"
-          }
-        });
-        if(uploadFileResult.ok != true){
-          alert(`Couldn't upload the new file (${finalPath}) to the repo: ${(await uploadFileResult.json()).message}`);
-          $("#loadingOverlay").addClass("d-none");
-          return;
-        }
-        console.log(uploadFileResult);*/
-
+        
+        // Upload the file as a new commit
         var uploadFileResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
           owner: username,
           repo: selectedRepo.repoName,
@@ -429,7 +476,7 @@
           repo: selectedRepo.repoName,
           path: selectedRepo.database,
           message: `Add entry in database for file ${fileLocalPath}`,
-          content: btoa(database), // <-- TODO: THIS RETURNS [object Object]
+          content: btoa(JSON.stringify(database, null, 2)), // <- We add spaces for readability for maintainers
           sha: databaseSha
           
         }).catch((err) => {
@@ -443,33 +490,51 @@
 
 
         // Do a pull request with the newly added files
-        // ERROR HERE: NO COMMITS BETWEEN MAIN AND MAIN
         if(selectedRepo.repoIsFork){
           var additionalNotes = $("#txtNotes").val();
-          await octokit.request('POST /repos/{owner}/{repo}/pulls', {
-            owner: username,
+          var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+            owner: selectedRepo.originalRepoOwner,
             repo: selectedRepo.repoName,
             title: `Add new song: ${entry.game} - ${entry.song}`,
             body: `Automatic PR created with Z64 Submission Form\n\nAdditional notes: ${additionalNotes}`,
-            head: selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
+            head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
             base: selectedRepo.repoDefaultBranch,
 
           }).catch((err) => {
             alert(`Couldn't create a pull request: ${err}`);
           });
+          if(pullRequestResult === undefined) {
+            $("#loadingOverlay").addClass("d-none");
+            return;
+          }
         }
         
-
-        console.log('Process finished');
+        alert("Process completed!");
+        clearForm();
+        await syncRepoAndGetLatestDatabase();
         $("#loadingOverlay").addClass("d-none");
       }
 
 
 
       $(function(){
+        // Submit mappings
         $("#btnLogin").on("click", userLogin);
         $("#btnSubmit").on("click", submitForm);
+
+        // We don't want to trigger an actual submit, since we don't have any backend
+        $("#mainForm").on("submit", function(e){
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        
+        // Form events
         $("#fileUpload").on("change", processFile);
+        $("#txtGameName, #txtSongName").alphanum({
+          allow: "!@#$%^&()+=[]\';,{}~`.- _", // We allow all character accepted as filenames
+          //disallow: '\\/:*?"<>|',
+        });
+        
 
         $("#ddlSubmissionType").on("change", function(){
           $("#mainForm").toggleClass("d-none", this.value != "new")
@@ -478,25 +543,28 @@
       });
     </script>
 
+
     <div id="loadingOverlay" class="loading-overlay d-none">
       <i class="fa-solid fa-spinner fa-spin-pulse fa-3x"></i>
     </div>
 
-    <nav class="nav-shadow navbar fixed-top" style="padding-left: 8px; height: 46.5px;">
+    <nav class="navbar navbar-expand-lg bg-body-tertiary" style="padding-left: 8px; height: 46.5px;">
       <a class="navbar-brand text-secondary" style="width: 242px" href="#">
         Z64 Submission Form
       </a>
       
+      <div class="col"></div>
+
       <div class="col-auto ml-auto d-none" id="niUsername">
         Logged as <b id="lbUsername">...</b>
       </div>
 
-      <div class="col-auto px-0 d-none" id="niAvatar">
-        <img id="imgAvatar" class="rounded-circle" width="30" height="30" src="" />
+      <div class="col-auto px-2 d-none" id="niAvatar">
+        <img id="imgAvatar" class="rounded-circle bg-white" width="30" height="30" src="" />
       </div>
     </nav>
 
-    <div class="container" style="padding-top: 46.5px;">
+    <div class="container">
       <div class="row justify-content-md-center pt-5 pb-5">
 
         <!-- AUTHORIZATION -->
@@ -504,13 +572,13 @@
           <h5>Authorization</h5>
           <p>This tools works by using the GitHub API to create commits and pull requests for you.</p>
 
-          <div class="form-group">
+          <div class="form-group mb-3">
             <label>GitHub authorization token:</label>
             <p class="hint">The token with access to the fork of the repository you are trying to send this file.</p>
             <input type="text" id="txtGithubAuthToken" class="form-control" placeholder="github_pat_xxxxx... or ghp_xxxxx..." />
           </div>
 
-          <button type="button" class="btn btn-success" id="btnLogin">Login</button>
+          <button type="button" class="btn btn-primary" id="btnLogin">Login</button>
         </div>
 
 
@@ -519,26 +587,17 @@
           <h5>Select a repository</h5>
           <p>Select the repository you will be submitting a new music track.</p>
           <div class="container" id="containerRepo">
-            <!--<button type="button" class="btn btn-outline-dark w-100 mb-3">
-              <div class="row">
-                <img id="imgAvatar" class="rounded-circle ml-3" width="45" height="45" src="" />
-                <div class="col text-left">
-                  <h5>Repo Name</h5>
-                  <span class="opacity-500">Description! Description!</span>
-                </div>
-              </div>
-            </button>-->
           </div>
         </div>
 
 
         <!-- SUBMISSION DETAILS -->
-        <div class="card rounded col p-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
+        <div class="card rounded col p-3 g-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
           <h5>Submission details</h5>
 
-          <div class="form-group">
+          <div class="form-group mb-3">
             <label>Submission type:</label>
-            <select id="ddlSubmissionType" class="form-control">
+            <select id="ddlSubmissionType" class="form-select">
               <option value="">Select an option...</option>
               <option value="new">Upload a new song</option>
               <option value="edit">Modify/update existing song</option>
@@ -547,11 +606,12 @@
 
           <!--TODO: Add typeahead for choosing the existing track on edit mode-->
 
-          <div id="mainForm" class="d-none">
-            <div class="form-group">
+          <form id="mainForm" class="d-none needs-validation">
+
+            <div class="form-group mb-3">
               <label>File:</label>
               <p class="hint">The z64 song file you are uploading (ootrs, mmrs). If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded file.</p>
-              <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" />
+              <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" required/>
               <p class="opacity-600 mb-0 d-none" id="pInformationFromFile">
                 Information extracted from the file:<br>
                 <b>• Format:</b> <span id="lbFormat">...</span><br>
@@ -566,30 +626,39 @@
                 <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
                 <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
               </p>
+              <div class="invalid-feedback">
+                A valid file is needed for upload.
+              </div>
             </div>
   
             <hr>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Game name:</label>
               <p class="hint">The name of the game your song comes from.</p>
-              <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
+              <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" required />
+              <div class="invalid-feedback">
+                Please insert a game name.
+              </div>
             </div>
   
             <!--TODO: Make sure in new mode, we are not using an existing track's name-->
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Song name:</label>
               <p class="hint">The actual name of the song.</p>
-              <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
+              <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" required />
+              <div class="invalid-feedback">
+                Please insert a name for the song.
+              </div>
             </div>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Song type:</label>
               <p class="hint">
                 <b>• Background Music (BGM):</b> looping track, used as background music.<br>
                 <b>• Fanfare:</b> non looping track, used for events (e.g. when you find items).
               </p>
-              <select id="ddlSongType" class="form-control">
+              <select id="ddlSongType" class="form-select">
                 <option value="bgm">Background Music (BGM)</option>
                 <option value="fanfare">Fanfare</option>
               </select>
@@ -597,31 +666,35 @@
   
             <hr>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Composer(s):</label>
-              <p class="hint">A list of the names of the original composers of this song.</p>
-              <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo" />
+              <p class="hint">A list of the names of the original composers of this song.<br>
+              List multiple composer separated by comma.</p>
+              <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo, Kazumi Totaka" />
             </div>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Converter(s):</label>
               <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
-              <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin" />
+              <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin, Owl is not a Cat" />
             </div>
   
             <hr>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Preview link:</label>
               <p class="hint">
                 Link to a preview of this song. Can it be on two formats:<br>
                 <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
                 <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
               </p>
-              <input id="txtPreviewLink" type="text" class="form-control" />
+              <input id="txtPreviewLink" type="text" class="form-control" required />
+              <div class="invalid-feedback">
+                A preview link is required.
+              </div>
             </div>
   
-            <div class="form-group">
+            <div class="form-group mb-3">
               <label>Notes:</label>
               <p class="hint">
                 Additional notes for the people handling your submission.
@@ -629,8 +702,8 @@
               <input id="txtNotes" type="text" class="form-control" />
             </div>
   
-            <button id="btnSubmit" type="button" class="btn btn-success">Submit</button>
-          </div>
+            <button id="btnSubmit" type="submit" class="btn btn-primary w-100">Submit</button>
+          </form>
           
         </div>
       </div>
