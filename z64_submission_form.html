@@ -222,6 +222,8 @@
           $("#panelSubmissionDetails").removeClass("d-none");
         }
 
+        $("#imgRepoAvatar").attr("src", repo.originalRepoAvatarUrl);
+        $("#lbRepoName").text(repo.name);
         $("#loadingOverlay").addClass("d-none");
       }
 
@@ -535,8 +537,7 @@
           //disallow: '\\/:*?"<>|',
         });
         
-
-        $("#ddlSubmissionType").on("change", function(){
+        $("input[name='rbSubmissionType']").on("change", function(){
           $("#mainForm").toggleClass("d-none", this.value != "new")
           // TODO: ADD SELECT FOR CHOOSING THE SONG TO EDIT | this.value == "edit"
         });
@@ -592,22 +593,43 @@
 
 
         <!-- SUBMISSION DETAILS -->
-        <div class="card rounded col p-3 g-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
-          <h5>Submission details</h5>
-
-          <div class="form-group mb-3">
-            <label>Submission type:</label>
-            <select id="ddlSubmissionType" class="form-select">
-              <option value="">Select an option...</option>
-              <option value="new">Upload a new song</option>
-              <option value="edit">Modify/update existing song</option>
-            </select>
+        <div class="card rounded col p-0 g-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
+          
+          <div class="row g-0 py-2 align-items-center border-bottom bg-primary-subtle rounded-top">
+            <i class="col-auto fa-solid fa-lg fa-arrow-left me-auto ms-3"></i>
+            <img class="col-auto rounded-circle bg-white" id="imgRepoAvatar" width="30" height="30" src="" />
+            <h5 class="col-auto ps-2 pe-3 mb-0 me-auto" id="lbRepoName"></h5>
           </div>
+
+          <div id="preMainForm" class="p-3">
+            <h5>Submission details</h5>
+            <p>Select what type of submission you want to do:</p>
+  
+            <div class="row g-0">
+              <div class="p-3 col me-2 border rounded">
+                <div class="row g-0">
+                  <input class="form-check-input col-auto" type="radio" name="rbSubmissionType" id="rbSubmissionTypeNew" value="new">
+                  <label class="form-check-label col ps-3" for="rbSubmissionTypeNew">
+                    <b>Upload</b> a new song not in the repo
+                  </label>
+                </div>
+              </div>
+              <div class="p-3 col ms-2 border rounded">
+                <div class="row g-0">
+                  <input class="form-check-input col-auto" type="radio" name="rbSubmissionType" id="rbSubmissionTypeEdit" value="edit">
+                  <label class="form-check-label col ps-3" for="rbSubmissionTypeEdit">
+                    <b>Modify/update</b> an existing song
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
 
           <!--TODO: Add typeahead for choosing the existing track on edit mode-->
 
-          <form id="mainForm" class="d-none needs-validation">
-
+          <form id="mainForm" class="d-none needs-validation p-3 pt-0">
+            
             <div class="form-group mb-3">
               <label>File:</label>
               <p class="hint">The z64 song file you are uploading (ootrs, mmrs). If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded file.</p>
@@ -702,8 +724,11 @@
               <input id="txtNotes" type="text" class="form-control" />
             </div>
   
-            <button id="btnSubmit" type="submit" class="btn btn-primary w-100">Submit</button>
+            <button id="btnSubmit" type="submit" class="btn btn-primary w-100">
+              <i class="fa-solid fa-paper-plane me-2"></i>Submit
+            </button>
           </form>
+
           
         </div>
       </div>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html data-bs-theme="dark">
+  <head>
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+    <!-- JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+
+    <!-- Other stuff -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.alphanum/1.0.24/jquery.alphanum.min.js"></script>
+    <script src="js/typeahead.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+  </head>
+  <body>
+
+    <script type="module">
+      import { Octokit, App } from "https://esm.sh/octokit";
+      import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
+
+      var repos = []; // <-- Add here more repos, added by the user
+      var selectedRepo = "";
+      var database = [];
+
+      async function init(){
+        // We don't need auth for the stuff we will be doing here...
+        const octokit = new Octokit();
+        $("#loadingOverlay").removeClass("d-none");
+
+
+        // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
+        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
+        repos = [];
+
+
+        // Load the properties from each repo
+        // We do this every time, to always have the latest version of each one
+        await Promise.all(userRepos.map(async (userRepo) => {
+          var userRepoSplitted = userRepo.split("/");
+          var owner = userRepoSplitted[0];
+          var repo = userRepoSplitted[1];
+
+          // Get the main info from this repo
+          var repoResponse = await octokit.request('GET /repos/{owner}/{repo}', {
+            owner: owner,
+            repo: repo,
+          }).catch((error) => { });
+
+          // Get the z64musicpacker.properties from this repo
+          var propertiesResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+            owner: owner,
+            repo: repo,
+            path: "z64musicpacker.properties"
+          }).catch((error) => { });
+
+          // If we find a z64musicpacker.properties file, this is a compatible repo!
+          if(repoResponse !== undefined && propertiesResponse !== undefined){
+            // Read the file
+            var properties = JSON.parse(atob(propertiesResponse.data.content));
+            console.log(properties);
+            console.log(propertiesResponse);
+            console.log(repoResponse);
+
+            // Load the repo into our list
+            repos.push({
+              repoName: repo,
+              repoOwner: owner,
+              repoAvatarUrl: repoResponse.data.owner.avatar_url,
+              repoDefaultBranch: repoResponse.data.default_branch,
+
+              // Import Z64 music packer properties
+              ...properties,
+            });
+          }
+        }));
+
+        
+        // TODO: ADD THE REPOS TO THE MAIN SELECT
+        repos.forEach((repo) => {
+          $("#ddlRepos").append($("<option>", {
+            value: repo.repoName,
+            text: repo.name,
+          }));
+        });
+
+        // TODO: SELECT THE FIRST REPO
+
+
+        await loadRepo();
+        $("#loadingOverlay").addClass("d-none");
+      }
+
+      async function loadRepo(){
+        // TODO: GET THE DATABASE FROM THIS REPO
+
+        // TODO: SHOW IT TO THE USER
+
+      }
+
+      $(function(){
+        init();
+      });
+    </script>
+
+
+
+    <style>
+      .loading-overlay {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        color: var(--bs-primary-text-emphasis);
+        background-color: rgba(24, 24, 24, .6);
+        z-index: 5600;
+      }
+      .loading-overlay i{
+        position: absolute;
+        top: 47%;
+        left: 47%;
+      }
+    </style>
+
+
+
+    <div id="loadingOverlay" class="loading-overlay d-none">
+      <i class="fa-solid fa-spinner fa-spin-pulse fa-3x"></i>
+    </div>
+
+    <nav class="navbar navbar-expand-lg bg-body-tertiary" style="padding-left: 8px; height: 46.5px;">
+      <a class="navbar-brand text-secondary" style="width: 242px" href="#">
+        Z64 Song Packer
+      </a>
+
+      <div>
+        <select class="form-control" id="ddlRepos"></select>
+      </div>
+    </nav>
+
+    <div class="container">
+
+    </div>
+
+
+    <!-- REPO SELECT MODAL -->
+
+  </body>
+</html>
