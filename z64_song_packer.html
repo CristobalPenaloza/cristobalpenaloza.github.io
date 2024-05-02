@@ -23,7 +23,7 @@
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
 
       var repos = []; // <-- Add here more repos, added by the user
-      var selectedRepo = "";
+      var selectedRepo = null;
       var database = [];
 
       async function init(){
@@ -86,20 +86,60 @@
             text: repo.name,
           }));
         });
-
+        
         // TODO: SELECT THE FIRST REPO
-
+        // TODO: SELECT ALSO THE LAST REPO USED BY THE USER (STORED IN COOKIE)
+        selectedRepo = repos[0];
 
         await loadRepo();
         $("#loadingOverlay").addClass("d-none");
       }
 
       async function loadRepo(){
-        // TODO: GET THE DATABASE FROM THIS REPO
+        const octokit = new Octokit();
+        $("#loadingOverlay").removeClass("d-none");
 
-        // TODO: SHOW IT TO THE USER
+        // Get the database from the current repo
+        var dbResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+          owner: selectedRepo.repoOwner,
+          repo: selectedRepo.repoName,
+          path: selectedRepo.database
+        }).catch((err) => { 
+          // TODO: MANAGE ERRORS
+        });
+        if(dbResponse === undefined) return error;
+
+        // Load the database
+        database = JSON.parse(atob(dbResponse.data.content));
+        console.log(database);
+        // TODO: MANAGE ERRORS
+        
+        // Show the list of games to the user
+        loadGamesList();
+
+        // We finish the loading
+        $("#loadingOverlay").addClass("d-none");
+      }
+
+      function loadGamesList(){
+        // Get the games list, with no dupes
+        var games = [...new Set(database.map((d) => d.game))];
+        games.forEach((game, i) => {
+          $("#panelGames").append(
+            `<div class="btn-game" id="btnSelectRepo${i}" data-game="${game}">
+              ${game}
+            </div>`
+          );
+          $(`#btnSelectRepo${i}`).on("click", function(){
+            loadSongsList(game);
+          })
+        });
+      }
+
+      function loadSongsList(game){
 
       }
+
 
       $(function(){
         init();
@@ -124,6 +164,28 @@
         top: 47%;
         left: 47%;
       }
+
+      .btn-game{
+        color: var(--nav-lateral-text);
+        width: 100%;
+        text-decoration: none;
+        padding: 10px 0 10px 20px;
+        transition: .1s;
+        cursor: pointer;
+      }
+      .btn-game:hover{
+        color: var(--bs-primary-text-emphasis);
+        background-color: rgba(0,0,0,.3);
+      }
+      .btn-game.active{
+        color: var(--bs-primary-text-emphasis);
+        padding-left: 17px;
+        background-color: rgba(0,0,0,.15);
+        border-left: 3px solid var(--bs-primary-text-emphasis);
+      }
+
+
+      
     </style>
 
 
@@ -142,8 +204,26 @@
       </div>
     </nav>
 
-    <div class="container">
-
+    <div class="container mt-3">
+      <div class="row g-3">
+        <div class="col-5">
+          <div class="card bg-body-tertiary py-3">
+            <h5 class="ps-3 pb-3 border-bottom">Games list:</h5>
+            <div id="panelGames">
+    
+            </div>
+          </div>
+        </div>
+  
+        <div class="col-7">
+          <div class="card bg-body-tertiary py-3">
+            <h5 class="ps-3 pb-3 border-bottom">Songs for:</h5>
+            <div id="panelSongs">
+    
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
 
