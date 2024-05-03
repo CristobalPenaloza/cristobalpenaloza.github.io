@@ -25,17 +25,17 @@
       var repos = []; // <-- Add here more repos, added by the user
       var selectedRepo = null;
       var database = [];
+      var selections = [];
 
       async function init(){
         // We don't need auth for the stuff we will be doing here...
-        const octokit = new Octokit();
+        // const octokit = new Octokit();
         $("#loadingOverlay").removeClass("d-none");
 
 
         // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
-        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
+        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo/main"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
         repos = [];
-
 
         // Load the properties from each repo
         // We do this every time, to always have the latest version of each one
@@ -43,34 +43,25 @@
           var userRepoSplitted = userRepo.split("/");
           var owner = userRepoSplitted[0];
           var repo = userRepoSplitted[1];
-
-          // Get the main info from this repo
-          var repoResponse = await octokit.request('GET /repos/{owner}/{repo}', {
-            owner: owner,
-            repo: repo,
-          }).catch((error) => { });
+          var defaultBranch = userRepoSplitted[2];
 
           // Get the z64musicpacker.properties from this repo
-          var propertiesResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-            owner: owner,
-            repo: repo,
-            path: "z64musicpacker.properties"
-          }).catch((error) => { });
+          // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
+          var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
+          var propertiesResponse = await fetch(z64PropertiesLink);
 
-          // If we find a z64musicpacker.properties file, this is a compatible repo!
-          if(repoResponse !== undefined && propertiesResponse !== undefined){
+          if(propertiesResponse.ok){
             // Read the file
-            var properties = JSON.parse(atob(propertiesResponse.data.content));
+            var properties = await propertiesResponse.json();
             console.log(properties);
             console.log(propertiesResponse);
-            console.log(repoResponse);
 
             // Load the repo into our list
             repos.push({
               repoName: repo,
               repoOwner: owner,
-              repoAvatarUrl: repoResponse.data.owner.avatar_url,
-              repoDefaultBranch: repoResponse.data.default_branch,
+              repoAvatarUrl: "",//repoResponse.data.owner.avatar_url,
+              repoDefaultBranch: defaultBranch,
 
               // Import Z64 music packer properties
               ...properties,
@@ -95,49 +86,139 @@
         $("#loadingOverlay").addClass("d-none");
       }
 
+
+
       async function loadRepo(){
-        const octokit = new Octokit();
         $("#loadingOverlay").removeClass("d-none");
 
         // Get the database from the current repo
-        var dbResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-          owner: selectedRepo.repoOwner,
-          repo: selectedRepo.repoName,
-          path: selectedRepo.database
-        }).catch((err) => { 
-          // TODO: MANAGE ERRORS
-        });
-        if(dbResponse === undefined) return error;
+        var dbLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.database}`;
+        var dbResponse = await fetch(dbLink);
 
-        // Load the database
-        database = JSON.parse(atob(dbResponse.data.content));
-        console.log(database);
-        // TODO: MANAGE ERRORS
-        
-        // Show the list of games to the user
-        loadGamesList();
+        if(dbResponse.ok){
+          // Load the database
+          database = await dbResponse.json();
+          database.forEach((item, i) => {
+            // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
+            item.index = i;
+          });
+          console.log(database);
+          
+          // Show the list of games to the user
+          loadGamesList();
 
-        // We finish the loading
-        $("#loadingOverlay").addClass("d-none");
+          // We finish the loading
+          $("#loadingOverlay").addClass("d-none");
+        }
       }
 
+
+
       function loadGamesList(){
+        $("#panelGames").empty();
+
         // Get the games list, with no dupes
-        var games = [...new Set(database.map((d) => d.game))];
+        var games = [...new Set(database.map(s => s.game))].sort();
         games.forEach((game, i) => {
+          var songsOfGame = database.filter(s => s.game == game);
+          var songsChecked = songsOfGame.filter(s => selections.includes(s.index));
+          var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfGame.length ? "checked" : "indeterminate");
+          
+          // Append the game nav item
           $("#panelGames").append(
-            `<div class="btn-game" id="btnSelectRepo${i}" data-game="${game}">
-              ${game}
+            `<div class="btn-game row g-0" id="btnGame${i}" data-game="${game}">
+              <input class="form-check-input col-auto" type="checkbox" value="" id="cbxGame${i}" ${checkState}/>
+              <span class="col ms-3">${game}</span>
+              <span class="col-auto me-4">${songsChecked.length}/${songsOfGame.length}</span>
             </div>`
           );
-          $(`#btnSelectRepo${i}`).on("click", function(){
-            loadSongsList(game);
+
+          // Set the current state of the checkbox (we do it like this for the intermediate stuff)
+          if(checkState != "") $(`#cbxGame${i}`).prop(checkState, true);
+
+          // Add handlers for the inputs
+          $(`#btnGame${i}`).on("click", function(){
+            loadSongsList(songsOfGame);
+          });
+          $(`#cbxGame${i}`).on("click", function(e){
+            e.stopPropagation(); // We don't want to hit the button underneath...
+            var songIndices = database.filter((s) => s.game == game).map((s) => s.index);
+            if(this.checked) selections.push(...songIndices);
+            else selections = selections.filter((s) => !songIndices.includes(s));
+            updateSelections();
+          });
+        });
+      }
+
+
+      var currentSongList = [];
+      function loadSongsList(songs){
+        currentSongList = songs;
+        var games = [...new Set(songs.map(s => s.game))];
+
+        // Cleanup the panel and select the games selected for this song list
+        $("#panelSongs").empty();
+        $(".btn-game").removeClass("active");
+        $("#lbTitleSongs").text(games.join(", "));
+        games.forEach(game => $(`.btn-game[data-game="${game}"]`).addClass("active"));
+
+        // Show the song list to the user
+        songs.forEach((s, i) => {
+          var isOOTRS = s.file.toLowerCase().endsWith(".ootrs");
+          var categories = s.categories.split(",").map((c) => 
+            `<span class="badge rounded-pill border">${isOOTRS ? c : mmrsCategoryToText(c)}</span>`
+          );
+          var isSelected = selections.includes(s.index);
+
+          $("#panelSongs").append(
+            `<div class="card col-4 btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
+              <b>${s.song}<i class="fa-solid fa-play" style="float: right; margin-top: 5px"></i></b>
+              <hr>
+              <span><i class="fa-solid fa-music fa-fw"></i> ${s.composers || "<span class='opacity-50'>Unknown</span>"}</span>
+              <span><i class="fa-solid fa-wave-square fa-fw"></i> ${s.converters || "<span class='opacity-50'>Unknown</span>"}</span>
+              <hr>
+              <div class='row g-1'>
+                <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
+                <div class='col'>${categories.join(" ")}</div>
+              </div>
+              <hr>
+              <span><i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
+                ${s.usesCustomBank ? (" with custom bank" + (s.usesCustomSamples ? " and custom samples" : "")) : ""}</span></span>
+            </div>`
+          );
+          $(`#btnSong${i}`).on("click", function(){
+            if(isSelected) selections = selections.filter(sel => sel != s.index);
+            else selections.push(s.index);
+            updateSelections();
           })
         });
       }
 
-      function loadSongsList(game){
+      function mmrsCategoryToText(category){
+        switch(category){
+          case "0": return "Fields";
+          case "1": return "Towns";
+          case "2": return "Dungeons";
+          case "3": return "Indoors";
+          case "4": return "Minigame";
+          case "5": return "Action events";
+          case "6": return "Calm events";
+          case "7": return "Boss fights";
+          case "8": return "Item get";
+          case "9": return "Game over";
+          case "10": return "Area clear";
+          case "16": return "Special";
+          default: return "Unknown";
+        }
+      }
 
+      function updateSelections(){
+        selections = [...new Set(selections)];
+        console.log(selections);
+        
+        loadGamesList();
+        loadSongsList(currentSongList);
+        // TODO: RELOAD CURRENT SONG LIST
       }
 
 
@@ -175,16 +256,30 @@
       }
       .btn-game:hover{
         color: var(--bs-primary-text-emphasis);
-        background-color: rgba(0,0,0,.3);
+        background-color: rgba(0,0,0,.2);
       }
       .btn-game.active{
         color: var(--bs-primary-text-emphasis);
         padding-left: 17px;
-        background-color: rgba(0,0,0,.15);
+        background-color: var(--bs-primary-bg-subtle);
         border-left: 3px solid var(--bs-primary-text-emphasis);
       }
 
-
+      .btn-song{
+        padding: .4rem;
+        transition: .1s;
+        cursor: pointer;
+      }
+      .btn-song hr{
+        margin: .4rem 0;
+      }
+      .btn-song .badge{
+        color: inherit;
+      }
+      .btn-song.active{
+        /*color: var(--bs-primary-text-emphasis);*/
+        background-color: var(--bs-primary-bg-subtle);
+      }
       
     </style>
 
@@ -217,8 +312,8 @@
   
         <div class="col-7">
           <div class="card bg-body-tertiary py-3">
-            <h5 class="ps-3 pb-3 border-bottom">Songs for:</h5>
-            <div id="panelSongs">
+            <h5 class="ps-3 pb-3 border-bottom" id="lbTitleSongs">Songs for:</h5>
+            <div id="panelSongs" class="row px-3 g-3">
     
             </div>
           </div>
