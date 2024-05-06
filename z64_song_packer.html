@@ -31,10 +31,12 @@
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
       import * as bootstrap from "bootstrap";
 
+
       var repos = []; // <-- Add here more repos, added by the user
       var selectedRepo = null;
       var database = [];
       var selections = [];
+
 
       async function init(){
         // We don't need auth for the stuff we will be doing here...
@@ -186,16 +188,15 @@
             `<div class="col-4">
               <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                 <b>${s.song}<i id="btnPreview${i}" class="fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" style="float: right; margin-top: 5px"></i></b>
-                <hr>
-                <span><i class="fa-solid fa-music fa-fw"></i> ${s.composers || "<span class='opacity-50'>Unknown</span>"}</span>
-                <span><i class="fa-solid fa-wave-square fa-fw"></i> ${s.converters || "<span class='opacity-50'>Unknown</span>"}</span>
-                <hr>
-                <div class='row g-1'>
-                  <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
-                  <div class='col'>${categories.join(" ")}</div>
+                <div class='metadata border-top mt-2 pt-2'>
+                  <span><i class="fa-solid fa-music fa-fw"></i> ${s.composers || "<span class='opacity-50'>Unknown</span>"}</span><br>
+                  <span><i class="fa-solid fa-wave-square fa-fw"></i> ${s.converters || "<span class='opacity-50'>Unknown</span>"}</span>
                 </div>
-                <hr>
-                <span>
+                <div class='categories border-top mt-2 pt-2 row g-1'>
+                  <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
+                  <div class='col mt-0'>${categories.join(" ")}</div>
+                </div>
+                <span class="format border-top mt-2 pt-2">
                   <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
                   ${s.usesCustomBank ? (" with custom bank" + (s.usesCustomSamples ? " and custom samples" : "")) : ""}</span>
                 </span>
@@ -213,6 +214,8 @@
           });
         });
       }
+
+
 
       function mmrsCategoryToText(category){
         switch(category){
@@ -233,13 +236,14 @@
       }
 
 
+
       function previewSong(song){
         var preview = song.preview;
         $("#lbTitleSongPreview").text(song.game + " - " + song.song);
+        $("#panelAudioPreview, #panelYouTubePreview").addClass("d-none");
 
         // Stop the current song
-        var audioPlayer = $("#apSongPreview")[0];
-        audioPlayer.pause();
+        stopPreview();
 
         // If it's a YouTube link, we load it as an embed
         if(preview.startsWith("https://www.youtube.com") || preview.startsWith("https://youtu.be")){
@@ -249,32 +253,45 @@
           if (match && match[2].length == 11) {
             var videoId = match[2];
             $("#ytpSongPreview").attr("src", "https://www.youtube.com/embed/" + videoId + "?autoplay=1");
+            $("#panelYouTubePreview").removeClass("d-none");
             
           } else {
             alert("An error ocurred while processing a YouTube link.\n\nThe link could be corrupted or invalid.");
           }
 
         } else{
+          // If it's a Discord file, use a proxy to renew the access token
+          // Shouts out to Serinamoe on Reddit for providing this proxy! Thank you so much!
+          if(preview.startsWith("https://cdn.discordapp.com")){
+            preview = preview.replace("https://cdn.discordapp.com", "https://cdn.discordapp.xyz");
+          }
+
           // Load the preview
           $("#asrcSongPreview").attr("src", preview);
 
           // Reload the audio player
+          var audioPlayer = $("#apSongPreview")[0];
           audioPlayer.load();
           audioPlayer.play();
-        }
-
-        // If it's a Discord file, use a proxy to renew the access token
-        // Shouts out to Serinamoe on Reddit for providing this proxy! Thank you so much!
-        if(preview.startsWith("https://cdn.discordapp.com")){
-          preview = preview.replace("https://cdn.discordapp.com", "https://cdn.discordapp.xyz");
+          $("#panelAudioPreview").removeClass("d-none");
         }
 
         // Show the modal
         var modalSongPreview = new bootstrap.Modal('#modalSongPreview', {});
         modalSongPreview.show();
       }
+      function stopPreview(){
+        $("#ytpSongPreview").attr("src", "");
+        $("#apSongPreview")[0].pause();
+      }
 
 
+
+      function updateSongViewOptions(){
+        $("#panelSongs").toggleClass("hide-metadata", !$("#cbxViewMetadata").is(":checked"));
+        $("#panelSongs").toggleClass("hide-categories", !$("#cbxViewCategories").is(":checked"));
+        $("#panelSongs").toggleClass("hide-format", !$("#cbxViewFormat").is(":checked"));
+      }
       function updateSelections(){
         selections = [...new Set(selections)];
         console.log(selections);
@@ -287,6 +304,8 @@
 
       $(function(){
         init();
+        $("#modalSongPreview").on("hide.bs.modal", stopPreview);
+        $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", updateSongViewOptions);
       });
     </script>
 
@@ -343,16 +362,23 @@
         background-color: var(--bs-primary-bg-subtle);
         border-color: var(--bs-primary-text-emphasis);
       }
+      #panelSongs.hide-metadata .metadata{
+        display: none;
+      }
+      #panelSongs.hide-categories .categories{
+        display: none;
+      }
+      #panelSongs.hide-format .format{
+        display: none;
+      }
 
 
       .responsive-iframe {
         position: relative;
         overflow: hidden;
         width: 100%;
-        padding-top: 56.25%; /* 16:9 Aspect Ratio (divide 9 by 16 = 0.5625) */
+        padding-top: 56.25%;
       }
-
-      /* Then style the iframe to fit in the container div with full height and width */
       .responsive-iframe iframe {
         position: absolute;
         top: 0;
@@ -362,7 +388,6 @@
         width: 100%;
         height: 100%;
       }
-      
     </style>
 
 
@@ -394,8 +419,24 @@
   
         <div class="col-7">
           <div class="card bg-body-tertiary py-3">
-            <h5 class="ps-3 pb-3 border-bottom" id="lbTitleSongs">Songs for:</h5>
-            <div id="panelSongs" class="row px-3 g-2">
+            <h5 class="ps-3 pb-3 mb-0 border-bottom" id="lbTitleSongs">Songs view</h5>
+            <div id="panelSongViewOptions" class="border-bottom py-2 px-3">
+              <div class="form-check form-check-inline form-switch">
+                <input class="form-check-input" type="checkbox" id="cbxViewMetadata" checked>
+                <label class="form-check-label" for="cbxViewMetadata">Show composers/converters</label>
+              </div>
+
+              <div class="form-check form-check-inline form-switch">
+                <input class="form-check-input" type="checkbox" id="cbxViewCategories" checked>
+                <label class="form-check-label" for="cbxViewCategories">Show categories</label>
+              </div>
+
+              <div class="form-check form-check-inline form-switch">
+                <input class="form-check-input" type="checkbox" id="cbxViewFormat" checked>
+                <label class="form-check-label" for="cbxViewFormat">Show file format</label>
+              </div>
+            </div>
+            <div id="panelSongs" class="row px-3 pt-3 g-2">
     
             </div>
           </div>
@@ -404,7 +445,7 @@
     </div>
 
 
-    <!-- REPO SELECT MODAL -->
+    <!-- REPO SELECT -->
 
 
     <!-- SONG PREVIEW -->
@@ -416,21 +457,19 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body text-center">
-            <audio controls autoplay id="apSongPreview">
-              <source src="" type="audio/mpeg" id="asrcSongPreview">
-            </audio>
-
-            <div class="responsive-iframe">
-              <iframe id="ytpSongPreview" type="text/html" width="100%" height="auto"
-                src="https://www.youtube.com/embed/M7lc1UVf-VE?autoplay=1&origin=http://example.com"
-                frameborder="0">
-              </iframe>
+            <div id="panelAudioPreview">
+              <audio controls autoplay id="apSongPreview">
+                <source src="" type="audio/mpeg" id="asrcSongPreview">
+              </audio>
+            </div>
+            
+            <div id="panelYouTubePreview" class="responsive-iframe">
+              <iframe id="ytpSongPreview" type="text/html" width="100%" height="auto" src="" frameborder="0"></iframe>
             </div>
             
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary">Save changes</button>
           </div>
         </div>
       </div>
