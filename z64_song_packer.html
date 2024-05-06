@@ -36,6 +36,7 @@
       var selectedRepo = null;
       var database = [];
       var selections = [];
+      var currentSongList = [];
 
 
       async function init(){
@@ -45,7 +46,7 @@
 
 
         // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
-        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo/main"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
+        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo/main", "CristobalPenaloza/OoT-Custom-Sequences/z64"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
         repos = [];
 
         // Load the properties from each repo
@@ -71,7 +72,6 @@
             repos.push({
               repoName: repo,
               repoOwner: owner,
-              repoAvatarUrl: "",//repoResponse.data.owner.avatar_url,
               repoDefaultBranch: defaultBranch,
 
               // Import Z64 music packer properties
@@ -82,11 +82,22 @@
 
         
         // TODO: ADD THE REPOS TO THE MAIN SELECT
-        repos.forEach((repo) => {
-          $("#ddlRepos").append($("<option>", {
-            value: repo.repoName,
-            text: repo.name,
-          }));
+        repos.forEach((repo, i) => {
+          $("#panelRepoSelection").append(
+            `<button type="button" class="btn btn-outline-light w-100 mb-3" id="btnSelectRepo${i}">
+              <div class="row">
+                <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
+                <div class="col text-start">
+                  <h5 class="mb-0">${repo.name}</h5>
+                  <span class="opacity-500">${repo.description}</span>
+                </div>
+              </div>
+            </button>`
+          );
+          $(`#btnSelectRepo${i}`).on("click", function(){
+            selectedRepo = repo;
+            loadRepo();
+          });
         });
         
         // TODO: SELECT THE FIRST REPO
@@ -98,9 +109,12 @@
       }
 
 
-
       async function loadRepo(){
         $("#loadingOverlay").removeClass("d-none");
+
+        // Set the main selector
+        $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl);
+        $("#lbRepoName").text(selectedRepo.name);
 
         // Get the database from the current repo
         var dbLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.database}`;
@@ -120,9 +134,12 @@
 
           // We finish the loading
           $("#loadingOverlay").addClass("d-none");
+
+          // Close the repo selection modal if it's open
+          var modalRepoSelection = bootstrap.Modal.getInstance('#modalRepoSelection');    
+          modalRepoSelection?.hide();
         }
       }
-
 
 
       function loadGamesList(){
@@ -160,9 +177,6 @@
           });
         });
       }
-
-
-      var currentSongList = [];
       function loadSongsList(songs){
         currentSongList = songs;
         var games = [...new Set(songs.map(s => s.game))];
@@ -216,7 +230,6 @@
       }
 
 
-
       function mmrsCategoryToText(category){
         switch(category){
           case "0": return "Fields";
@@ -234,7 +247,6 @@
           default: return "Unknown";
         }
       }
-
 
 
       function previewSong(song){
@@ -284,7 +296,6 @@
         $("#ytpSongPreview").attr("src", "");
         $("#apSongPreview")[0].pause();
       }
-
 
 
       function updateSongViewOptions(){
@@ -390,20 +401,19 @@
       }
     </style>
 
-
-
+    
     <div id="loadingOverlay" class="loading-overlay d-none">
       <i class="fa-solid fa-spinner fa-spin-pulse fa-3x"></i>
     </div>
 
     <nav class="navbar navbar-expand-lg bg-body-tertiary" style="padding-left: 8px; height: 46.5px;">
-      <a class="navbar-brand text-secondary" style="width: 242px" href="#">
-        Z64 Song Packer
-      </a>
-
-      <div>
-        <select class="form-control" id="ddlRepos"></select>
-      </div>
+      <a class="navbar-brand text-secondary" style="width: 242px" href="#">Z64 Song Packer</a>
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 ms-auto me-3">
+        <div class="row g-2">
+          <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="" />
+          <b class="col mb-0"><span id="lbRepoName">Z64 Test Repo</span> <i class="fa-solid fa-caret-down"></i></b>
+        </div>
+      </button>
     </nav>
 
     <div class="container mt-3">
@@ -446,6 +456,22 @@
 
 
     <!-- REPO SELECT -->
+    <div class="modal fade" id="modalRepoSelection" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5">Select a repository</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center" id="panelRepoSelection">
+
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
 
     <!-- SONG PREVIEW -->
