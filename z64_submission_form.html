@@ -66,6 +66,14 @@
       .twitter-typeahead {
         width: 100%;
       }
+
+      .custom-invalid-feedback{
+        width: 100%;
+        margin-top: .25rem;
+        font-size: .875em;
+        color: var(--bs-form-invalid-color);
+        display: none;
+      }
     </style>
 
     <script type="module">
@@ -400,6 +408,10 @@
       }
 
 
+      function commaStringToArray(commaString){
+        return commaString.split(',').map(x => x.trim()).filter(x => x);
+      }
+
     
       async function submitForm(){
 
@@ -407,8 +419,13 @@
         var form = $("#mainForm")[0];
         var formIsValid = form.checkValidity();
         $("#mainForm").addClass("was-validated");
-        if(!formIsValid) return;
 
+        // Custom validators
+        $("#txtSongName, #txtGameName").trigger("input");
+        
+        // Perform a vanilla check and a custom validation check
+        if(!formIsValid || $("#mainForm").find(".is-invalid").length > 0) return;
+        
 
         // Open octokit and trigger the overlay
         const octokit = new Octokit({ auth: authToken });
@@ -423,22 +440,21 @@
           $("#loadingOverlay").addClass("d-none");
           return;
         }
-        
 
         // Create the new entry
         var entry = {
           game: $("#txtGameName").val(),
           song: $("#txtSongName").val(),
           type: $("#ddlSongType").val(),
-          composers: $("#txtComposers").val(),
-          converters: $("#txtConverters").val(),
+          composers: commaStringToArray($("#txtComposers").val()),
+          converters: commaStringToArray($("#txtConverters").val()),
           preview: $("#txtPreviewLink").val(),
 
-          categories: $("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text(),
+          categories: commaStringToArray($("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text()),
           usesCustomBank: $("lbUsesCustomBank").text() == "Yes",
           usesCustomSamples: $("lbUsesCustomSamples").text() == "Yes",
           
-          uuid: crypto.randomUUID(),
+          uuid: crypto.randomUUID(), // <-- uuid v4
         };
 
 
@@ -498,7 +514,11 @@
             owner: selectedRepo.originalRepoOwner,
             repo: selectedRepo.repoName,
             title: `Add new song: ${entry.game} - ${entry.song}`,
-            body: `Automatic PR created with Z64 Submission Form\n\nAdditional notes: ${additionalNotes}`,
+            body: `Automatic PR created with Z64 Submission Form\n\n
+                  Entry added:\n
+                  ${JSON.stringify(database, null, 2)}\n\n
+                  User's notes:\n
+                  "${additionalNotes || "None"}"`,
             head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
             base: selectedRepo.repoDefaultBranch,
 
@@ -540,6 +560,24 @@
         $("input[name='rbSubmissionType']").on("change", function(){
           $("#mainForm").toggleClass("d-none", this.value != "new")
           // TODO: ADD SELECT FOR CHOOSING THE SONG TO EDIT | this.value == "edit"
+        });
+
+        $("#txtSongName, #txtGameName").on("input", function(){
+          var game = $("#txtGameName").val();
+          var song = $("#txtSongName").val();
+          if(!game || !song){
+            $("#txtSongName, #txtGameName").each(function(){ this.setCustomValidity("invalid"); });
+            $("#txtSongName").siblings(".invalid-feedback").html(`Please insert a game and name for the song.`);
+            return;
+          }
+
+          var isInDB = database.some(s => s.game == game && s.song == song);
+          console.log(game + " " + song + " " + isInDB);
+
+          $("#txtSongName, #txtGameName").each(function(){ this.setCustomValidity(isInDB ? "invalid" : ""); });
+          $("#txtSongName").siblings(".invalid-feedback").html(`<b>This song is already in this repo!</b><br>
+                If this is another version of the song, add something to differentiate it, like "Rosalina's Observatory (Tolin version)".<br>
+                If you are trying to modify an existing song, use the "Modify/update an existing song" button above.`);
         });
       });
     </script>
@@ -658,19 +696,16 @@
             <div class="form-group mb-3">
               <label>Game name:</label>
               <p class="hint">The name of the game your song comes from.</p>
-              <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" required />
-              <div class="invalid-feedback">
-                Please insert a game name.
-              </div>
+              <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Super Mario Galaxy" />
             </div>
   
             <!--TODO: Make sure in new mode, we are not using an existing track's name-->
             <div class="form-group mb-3">
               <label>Song name:</label>
               <p class="hint">The actual name of the song.</p>
-              <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" required />
+              <input id="txtSongName" type="text" class="form-control" placeholder="E.g.: Rosalina's Observatory" />
               <div class="invalid-feedback">
-                Please insert a name for the song.
+                Please insert a game and name for the song.
               </div>
             </div>
   
@@ -692,13 +727,20 @@
               <label>Composer(s):</label>
               <p class="hint">A list of the names of the original composers of this song.<br>
               List multiple composer separated by comma.</p>
-              <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo, Kazumi Totaka" />
+              <input id="txtComposers" type="text" class="form-control" placeholder="E.g.: Koji Kondo, Kazumi Totaka" required />
+              <div class="invalid-feedback">
+                Please insert at least one composer. Google is your best friend here. If you can't seem to find one, use "Unknown".
+              </div>
             </div>
   
             <div class="form-group mb-3">
               <label>Converter(s):</label>
-              <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.</p>
-              <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin, Owl is not a Cat" />
+              <p class="hint">A list of the names of ones who converted this song to the Zelda 64 format.<br>
+              List multiple converters separated by comma.</p>
+              <input id="txtConverters" type="text" class="form-control" placeholder="E.g.: Tolin, Owl is not a Cat" required />
+              <div class="invalid-feedback">
+                Please insert at least one converter. Your name should be here.
+              </div>
             </div>
   
             <hr>
@@ -708,11 +750,11 @@
               <p class="hint">
                 Link to a preview of this song. Can it be on two formats:<br>
                 <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
-                <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Mega, Discord, GitHub, etc).
+                <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Internet Archive, Discord, GitHub, etc).
               </p>
-              <input id="txtPreviewLink" type="text" class="form-control" required />
+              <input id="txtPreviewLink" type="text" class="form-control" pattern="https?://.+" required />
               <div class="invalid-feedback">
-                A preview link is required.
+                A valid preview link is required. Must be <b>https://</b>
               </div>
             </div>
   

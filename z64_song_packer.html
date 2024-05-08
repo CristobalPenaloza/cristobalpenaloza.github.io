@@ -192,19 +192,19 @@
 
           // Get the values from the song
           var isOOTRS = s.file.toLowerCase().endsWith(".ootrs");
-          var categories = s.categories.split(",").map((c) => 
+          var categories = toArray(s.categories).map((c) => 
             `<span class="badge rounded-pill border">${isOOTRS ? c : mmrsCategoryToText(c)}</span>`
           );
           var isSelected = selections.includes(s.index);
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
 
           $("#panelSongs").append(
-            `<div class="col-4">
+            `<div class="col-3">
               <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                 <b>${s.song}<i id="btnPreview${i}" class="fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" style="float: right; margin-top: 5px"></i></b>
                 <div class='metadata border-top mt-2 pt-2'>
-                  <span><i class="fa-solid fa-music fa-fw"></i> ${s.composers || "<span class='opacity-50'>Unknown</span>"}</span><br>
-                  <span><i class="fa-solid fa-wave-square fa-fw"></i> ${s.converters || "<span class='opacity-50'>Unknown</span>"}</span>
+                  <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
+                  <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
                 </div>
                 <div class='categories border-top mt-2 pt-2 row g-1'>
                   <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
@@ -212,7 +212,7 @@
                 </div>
                 <span class="format border-top mt-2 pt-2">
                   <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
-                  ${s.usesCustomBank ? (" with custom bank" + (s.usesCustomSamples ? " and custom samples" : "")) : ""}</span>
+                  ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla bank"}</span>
                 </span>
               </div>
             </div>`
@@ -246,6 +246,11 @@
           case "16": return "Special";
           default: return "Unknown";
         }
+      }
+
+      function toArray(v){
+        if(typeof v === 'string') return v.split(',').map(x => x.trim()).filter(x => x);
+        else return v;
       }
 
 
@@ -418,16 +423,16 @@
 
     <div class="container mt-3">
       <div class="row g-3">
-        <div class="col-5">
+        <div class="col-4">
           <div class="card bg-body-tertiary py-3">
             <h5 class="ps-3 pb-3 border-bottom">Games list:</h5>
-            <div id="panelGames">
+            <div id="panelGames" class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 7.2rem)">
     
             </div>
           </div>
         </div>
   
-        <div class="col-7">
+        <div class="col-8">
           <div class="card bg-body-tertiary py-3">
             <h5 class="ps-3 pb-3 mb-0 border-bottom" id="lbTitleSongs">Songs view</h5>
             <div id="panelSongViewOptions" class="border-bottom py-2 px-3">
@@ -446,8 +451,10 @@
                 <label class="form-check-label" for="cbxViewFormat">Show file format</label>
               </div>
             </div>
-            <div id="panelSongs" class="row px-3 pt-3 g-2">
+            <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
+              <div id="panelSongs" class="row px-3 pt-3 g-2">
     
+              </div>
             </div>
           </div>
         </div>
