@@ -15,6 +15,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.alphanum/1.0.24/jquery.alphanum.min.js"></script>
     <script src="js/typeahead.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.js"></script>
   </head>
   <body>
 
@@ -249,8 +250,9 @@
       }
 
       function toArray(v){
-        if(typeof v === 'string') return v.split(',').map(x => x.trim()).filter(x => x);
-        else return v;
+        if(Array.isArray(v)) return v;
+        else if(typeof v === 'string') return v.split(',').map(x => x.trim()).filter(x => x);
+        else return [];
       }
 
 
@@ -309,12 +311,67 @@
         $("#panelSongs").toggleClass("hide-format", !$("#cbxViewFormat").is(":checked"));
       }
       function updateSelections(){
+        // Make sure there is no duplicates
         selections = [...new Set(selections)];
-        console.log(selections);
-        
+
+        // Reload the lists
         loadGamesList();
         loadSongsList(currentSongList);
-        // TODO: RELOAD CURRENT SONG LIST
+
+        // Also update the select all
+        var allSelections = $("input[id^='cbxGame']").length;
+        var currentCheckedSelections = $("input[id^='cbxGame']:checked").length;
+        var currentIndeterminateSelections = $("input[id^='cbxGame']:indeterminate").length;
+        var checkState = (currentIndeterminateSelections + currentCheckedSelections) == 0 ? "" : (currentCheckedSelections >= allSelections ? "checked" : "indeterminate");
+        $("#cbxSelectAll").prop("checked", false).prop("indeterminate", false).prop(checkState, true);
+      }
+
+
+      async function downloadSongPack(){
+        console.log(selections);
+
+        // Create the archive
+        $("#loadingOverlay").removeClass("d-none");
+        var zip = new JSZip();
+
+        // Fetch the full binaries.zip file
+        var binariesLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`;
+        var binariesResponse = await fetch(binariesLink);
+
+        if(binariesResponse.ok){
+          var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
+          console.log(binaries);
+
+          // Loop every selection
+          for(var songIndex of selections){
+            var song = database[songIndex];
+
+            // Grab the song from our binaries file
+            var file = binaries.file(`${selectedRepo.binaries}/${song.file}`.replace("//", "/"));
+
+            // Add the file to the final zip pack
+            var extension = song.file.split('.').pop();
+            var fileName = `${song.game} - ${song.song}.${extension}`;
+            zip.file(fileName, await file.async("blob"));
+
+            // Download the song from the github repository (OLD fetch version | Changed because slow)
+            /*var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`;
+            var fileResponse = await fetch(fileLink);
+            console.log(fileLink);
+
+            if(fileResponse.ok){
+              // Add the thing to the archive
+              var extension = song.file.split('.').pop();
+              var fileName = `${song.game} - ${song.song}.${extension}`;
+              zip.file(fileName, await fileResponse.blob());
+            }*/
+          }
+        }
+
+        // We finally, download the generated zip
+        var blob = await zip.generateAsync({ type:"blob" });
+        saveAs(blob, "pack.zip");
+        $("#loadingOverlay").addClass("d-none");
       }
 
 
@@ -322,6 +379,19 @@
         init();
         $("#modalSongPreview").on("hide.bs.modal", stopPreview);
         $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", updateSongViewOptions);
+        $("#btnDownloadSongPack").on("click", downloadSongPack);
+
+        $("#cbxSelectAll").on("change", function(){
+          var checkedState = this.checked;
+          // To "select all", we do it with the current applied filter, to not interfere with the other user selections
+          $(".btn-game").not(".d-none").each(function(){
+            var game = $(this).data("game");
+            var songIndices = database.filter((s) => s.game == game).map((s) => s.index);
+            if(checkedState) selections.push(...songIndices);
+            else selections = selections.filter((s) => !songIndices.includes(s));
+          });
+          updateSelections();
+        });
       });
     </script>
 
@@ -425,7 +495,19 @@
       <div class="row g-3">
         <div class="col-4">
           <div class="card bg-body-tertiary py-3">
-            <h5 class="ps-3 pb-3 border-bottom">Games list:</h5>
+            <div class="row g-0 px-3 pb-3 border-bottom">
+              <input class="form-check-input col-auto me-3" type="checkbox" id="cbxSelectAll"/>
+              <h5 class="col mb-0">Games list:</h5>
+              <div class="nav-item dropdown col-auto ms-auto">
+                <button id="btnDownload" type="button" class="btn btn-link nav-link dropdown-toggle" data-bs-toggle="dropdown">
+                  <i class="fa-solid fa-download"></i>
+                </button>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" href="#" id="btnDownloadSongPack">Download song pack <span class="opacity-50">| ZIP</span></a></li>
+                  <li><a class="dropdown-item" href="#" id="btnDownloadSelections">Download selections and preferences <span class="opacity-50">| JSON</span></a></li>
+                </ul>
+              </div>
+            </div>
             <div id="panelGames" class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 7.2rem)">
     
             </div>

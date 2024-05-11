@@ -508,17 +508,16 @@
 
 
         // Do a pull request with the newly added files
+        // TODO: MANAGE MULTIPLE COMMITS FOR THE SAME PULL REQUEST...
+        // TODO: I think this already works, but I think I just need to add a new comment, instead of creating another PR
+        // See: https://github.com/CristobalPenaloza/Z64PackerTestRepo/pull/10
         if(selectedRepo.repoIsFork){
           var additionalNotes = $("#txtNotes").val();
           var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
             owner: selectedRepo.originalRepoOwner,
             repo: selectedRepo.repoName,
             title: `Add new song: ${entry.game} - ${entry.song}`,
-            body: `Automatic PR created with Z64 Submission Form\n\n
-                  Entry added:\n
-                  ${JSON.stringify(database, null, 2)}\n\n
-                  User's notes:\n
-                  "${additionalNotes || "None"}"`,
+            body: `## User's notes:\n"${additionalNotes || "None"}"\n\n## Entry added:\n\`\`\`\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n\n*Automatic PR created with Z64 Submission Form*`,
             head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
             base: selectedRepo.repoDefaultBranch,
 
