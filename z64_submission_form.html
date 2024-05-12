@@ -76,9 +76,18 @@
       }
     </style>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "@popperjs/core": "https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/esm/popper.min.js",
+      "bootstrap": "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.esm.min.js"
+    }
+  }
+  </script>
     <script type="module">
       import { Octokit, App } from "https://esm.sh/octokit";
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
+      import * as bootstrap from "bootstrap";
 
       var authToken = "";
       var fileBase64 = "";
@@ -157,7 +166,6 @@
             if(response !== undefined){
               // Read the file
               var properties = JSON.parse(atob(response.data.content));
-              console.log(properties);
 
               // Load the repo into our list
               repos.push({
@@ -178,7 +186,7 @@
 
           // Check if we have z64 fork repos available
           if(repos.length == 0){
-            alert("No Z64 repos found for this account!");
+            toast("No Z64 repos found for this account!");
             $("#loadingOverlay").addClass("d-none");
             return;
 
@@ -211,18 +219,18 @@
           // TODO: USE A MORE USER-FRIENDLY WAY TO SHOW THE ERROR
         } catch(e){
           $("#loadingOverlay").addClass("d-none");
-          alert(e);
+          toast(e);
         }
       }
 
       async function selectRepo(repo){
         selectedRepo = repo;
         $("#loadingOverlay").removeClass("d-none");
-        
+
         // Try to sync the repo and collect the database... we need it for the form
         var err = await syncRepoAndGetLatestDatabase();
         if(err != null){
-          alert(err);
+          toast(err);
 
         } else{
           // We synced and got the db! Now we load the form
@@ -239,7 +247,6 @@
         const octokit = new Octokit({ auth: authToken });
         var error = null;
         database = [];
-        
 
         // First, if the current repo is a fork, we try to sync to the latest commit
         if(selectedRepo.repoIsFork){
@@ -270,7 +277,7 @@
           databaseSha = dbResponse.data.sha;
 
         } catch(e){
-          alert(`Couldn't process database file, it could be corrupted: ${e}.\n\nThe process will continue, but the database will be remade.`);
+          toast(`Couldn't process database file, it could be corrupted: ${e}.\n\nThe process will continue, but the database will be remade.`);
           database = [];
           databaseSha = dbResponse.data.sha;
           return;
@@ -291,8 +298,7 @@
           source: games,
         });
 
-        console.log("Database loaded!");
-        console.log(database);
+        toast("Database loaded!");
       }
 
 
@@ -304,7 +310,6 @@
           $("#loadingOverlay").removeClass("d-none");
           var file = event.target.files[0];
           fileBase64 = (await toBase64(file)).split(",").pop();
-          //console.log("File processed: " + fileBase64);
 
           // Open the file as a zip
           var zip = new JSZip();
@@ -313,7 +318,7 @@
             // If it's not a valid file, we just stop the process here
             var ootrs = file.name.endsWith(".ootrs");
             if(!ootrs && !file.name.endsWith(".mmrs")) {
-              alert("Not a valid z64 file (ootrs, mmrs)");
+              toast("Not a valid z64 file (ootrs, mmrs)");
               $("#fileUpload").val("");
               $("#pInformationFromFile").addClass("d-none");
               return;
@@ -371,12 +376,12 @@
             
           // File doesn't have the zip format
           }, function() {
-            alert("Not a valid zip file");
+            toast("Not a valid zip file");
             clearFileInput();
           });
 
         } catch(e){
-          alert(`Couldn't process the file: ${e}`);
+          toast(`Couldn't process the file: ${e}`);
           clearFileInput();
         }
       }
@@ -436,7 +441,7 @@
         // Is this new one required?
         var syncError = await syncRepoAndGetLatestDatabase();
         if(syncError != null){
-          alert(syncError);
+          toast(syncError);
           $("#loadingOverlay").addClass("d-none");
           return;
         }
@@ -463,7 +468,6 @@
         var fileLocalPath = entry.game + "/" + entry.song + "." + extension;
         var finalPath = selectedRepo.binaries + fileLocalPath;
         entry.file = fileLocalPath;
-        console.log(entry);
 
 
         // Add this entry to the json file
@@ -479,13 +483,12 @@
           content: fileBase64,
           
         }).catch((err) => {
-          alert(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
+          toast(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
         });
         if(uploadFileResult === undefined) {
           $("#loadingOverlay").addClass("d-none");
           return;
         }
-        console.log(uploadFileResult);
 
 
         // Update the database
@@ -498,13 +501,12 @@
           sha: databaseSha
           
         }).catch((err) => {
-          alert(`Couldn't update database (${selectedRepo.database}) on the repo: ${err}`);
+          toast(`Couldn't update database (${selectedRepo.database}) on the repo: ${err}`);
         });
         if(updateDatabaseResult === undefined) {
           $("#loadingOverlay").addClass("d-none");
           return;
         }
-        console.log(updateDatabaseResult);
 
 
         // Do a pull request with the newly added files
@@ -512,30 +514,76 @@
         // TODO: I think this already works, but I think I just need to add a new comment, instead of creating another PR
         // See: https://github.com/CristobalPenaloza/Z64PackerTestRepo/pull/10
         if(selectedRepo.repoIsFork){
+
+          // We create a comment for this new entry
           var additionalNotes = $("#txtNotes").val();
-          var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+          var comment = `## Add new song: ${entry.game} - ${entry.song}\n### User's notes:\n"${additionalNotes || "None"}"\n### Entry added:\n<details>\n<summary>Spoiler</summary>\n\n\`\`\`\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n\n</details>`;
+
+          // Check if a pull request is already up for this repo
+          var currentPRResult = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
             owner: selectedRepo.originalRepoOwner,
             repo: selectedRepo.repoName,
-            title: `Add new song: ${entry.game} - ${entry.song}`,
-            body: `## User's notes:\n"${additionalNotes || "None"}"\n\n## Entry added:\n\`\`\`\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n\n*Automatic PR created with Z64 Submission Form*`,
-            head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
-            base: selectedRepo.repoDefaultBranch,
+            state: "open",
+            head: username + ":" + selectedRepo.repoDefaultBranch,
 
           }).catch((err) => {
-            alert(`Couldn't create a pull request: ${err}`);
+            toast(`Couldn't fetch current pull requests from repository: ${err}`);
           });
-          if(pullRequestResult === undefined) {
+          if(currentPRResult === undefined) {
             $("#loadingOverlay").addClass("d-none");
             return;
           }
+
+          // If there is no current PR, we add a new one
+          if(currentPRResult.data.length == 0){
+            var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+              owner: selectedRepo.originalRepoOwner,
+              repo: selectedRepo.repoName,
+              title: `Add new song: ${entry.game} - ${entry.song}`,
+              body: comment,
+              head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
+              base: selectedRepo.repoDefaultBranch,
+
+            }).catch((err) => {
+              toast(`Couldn't create a pull request: ${err}`);
+            });
+            if(pullRequestResult === undefined) {
+              $("#loadingOverlay").addClass("d-none");
+              return;
+            }
+
+          // If there IS an already opened PR, just add a comment to go in par with the just recently made commit
+          } else{
+            var prNumber = currentPRResult.data[0].number;
+            var commentResult = await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+              owner: selectedRepo.originalRepoOwner,
+              repo: selectedRepo.repoName,
+              issue_number: prNumber,
+              body: comment,
+
+            }).catch((err) => {
+              toast(`Couldn't comment on the already created pull request: ${err}`);
+            });
+            if(commentResult === undefined) {
+              $("#loadingOverlay").addClass("d-none");
+              return;
+            };
+          }
         }
         
-        alert("Process completed!");
+        toast("Process completed!");
         clearForm();
         await syncRepoAndGetLatestDatabase();
         $("#loadingOverlay").addClass("d-none");
       }
 
+
+      // TODO: CHANGE STYLE FOR ERROR TOASTS
+      function toast(message){
+        var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
+        $("#toastBody").text(message);
+        t.show();
+      }
 
 
       $(function(){
@@ -571,7 +619,6 @@
           }
 
           var isInDB = database.some(s => s.game == game && s.song == song);
-          console.log(game + " " + song + " " + isInDB);
 
           $("#txtSongName, #txtGameName").each(function(){ this.setCustomValidity(isInDB ? "invalid" : ""); });
           $("#txtSongName").siblings(".invalid-feedback").html(`<b>This song is already in this repo!</b><br>
@@ -774,5 +821,17 @@
         </div>
       </div>
     </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div id="toast" class="toast align-items-center bg-primary-subtle text-primary-emphasis" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body" id="toastBody">
+            Hello, world! This is a toast message.
+          </div>
+          <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    </div>
+    
   </body>
 </html>

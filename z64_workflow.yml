@@ -16,10 +16,14 @@ name: Z64 Workflow - Missing Song Detector
 
 on:
   push:
-    branches: [ "main" ] # Add here branches of your repo on which you want this script to trigger
+    # Add here the main branch of your repo, where you want this script to trigger.
+    branches: [ "main" ]
 
 jobs:
   build:
+    # Add here the name of your repo.
+    # It's important because the action will generate A LOT of unwanted commits in the branches, that could cause some conflicts.
+    if: github.repository == 'CristobalPenaloza/Z64PackerTestRepo'
     runs-on: ubuntu-latest
     strategy:
       matrix:
