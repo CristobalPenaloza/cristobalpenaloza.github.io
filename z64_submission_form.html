@@ -338,8 +338,8 @@
         $("#txtGameName").val(songToEdit.game);
         $("#txtSongName").val(songToEdit.song);
         $("#ddlSongType").val(songToEdit.type);
-        $("#txtComposers").val(commaStringToArray(songToEdit.composers).join(", "));
-        $("#txtConverters").val(commaStringToArray(songToEdit.converters).join(", "));
+        $("#txtComposers").val(toArray(songToEdit.composers).join(", "));
+        $("#txtConverters").val(toArray(songToEdit.converters).join(", "));
         $("#txtPreviewLink").val(songToEdit.preview);
 
         // Also, make fileUpload optional, when we only want to modify metadata and not the file itself
@@ -392,7 +392,7 @@
               // Read the MMRS-only categories file
               if(!ootrs && path == "categories.txt"){
                 file.async("text").then(function(text) {
-                  $("#lbCategories").text(text);
+                  $("#lbCategories").text(text.replace('-', ',')); // <-- Normalize separator
                 });
               }
 
@@ -461,6 +461,7 @@
         songToEdit = undefined;
       }
       async function submitForm(){
+
         // Check if the form is valid first
         var form = $("#mainForm")[0];
         var formIsValid = form.checkValidity();
@@ -488,6 +489,7 @@
 
         // CHECK IF WE ARE IN EDIT MODE
         var editMode = songToEdit != undefined;
+        var originalFilePath = songToEdit?.file;
 
         // Create the new entry
         // If we are editing, just grab the existing entry
@@ -502,15 +504,15 @@
         entry.game = $("#txtGameName").val();
         entry.song = $("#txtSongName").val();
         entry.type = $("#ddlSongType").val();
-        entry.composers = commaStringToArray($("#txtComposers").val());
-        entry.converters = commaStringToArray($("#txtConverters").val());
+        entry.composers = toArray($("#txtComposers").val());
+        entry.converters = toArray($("#txtConverters").val());
         entry.preview = $("#txtPreviewLink").val();
 
-        // TODO: IF WE HAVE A FILE SELECTED
-        if(!editMode){
-          entry.categories = commaStringToArray($("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text());
-          entry.usesCustomBank = $("lbUsesCustomBank").text() == "Yes";
-          entry.usesCustomSamples = $("lbUsesCustomSamples").text() == "Yes";
+        // If we have a file selected... update the path
+        if(fileBase64.length > 0){
+          entry.categories = toArray($("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text());
+          entry.usesCustomBank = $("#lbUsesCustomBank").text() == "Yes";
+          entry.usesCustomSamples = $("#lbUsesCustomSamples").text() == "Yes";
 
           // Generate a local path for the entry
           var extension = $("#lbFormat").text().toLowerCase();
@@ -518,7 +520,6 @@
           var finalPath = selectedRepo.binaries + fileLocalPath;
           entry.file = fileLocalPath;
         }
-
 
         // Add this entry to the json file
         if(editMode){
@@ -529,17 +530,54 @@
           database.push(entry);
         }
 
-        
-        // TODO: MANAGE IF THIS IS AN EDIT
-        // Upload the file as a new commit
-        if(!editMode){
+        // If we have a file selected, upload it as a new commit
+        if(fileBase64.length > 0){
+
+          // If we are editing, get the file SHA we are trying to edit
+          var fileSha = null;
+          if(editMode){
+            var originalPath = selectedRepo.binaries + originalFilePath;
+            var getFileResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: username,
+              repo: selectedRepo.repoName,
+              path: originalPath,
+            }).catch((err) => {
+              err = `Couldn't get original file from the repo: ${err}`;
+            });
+            if(getFileResponse === undefined) {
+              $("#loadingOverlay").addClass("d-none");
+              return;
+            }
+            fileSha = getFileResponse.data.sha;
+
+            // If the filename will be different, then delete the original file for a clean replacement
+            // WE HAVE TO DO THIS, since the unique names are needed to prevent duplication or overwrites
+            if(originalFilePath != fileLocalPath){
+              var deleteFileResponse = await octokit.request('DELETE /repos/{owner}/{repo}/contents/{path}', {
+                owner: username,
+                repo: selectedRepo.repoName,
+                path: originalPath,
+                message: `Delete file ${entry.file} for replacement`,
+                sha: fileSha,
+              }).catch((err) => {
+                err = `Couldn't delete original file from the repo: ${err}`;
+              });
+              if(deleteFileResponse === undefined){
+                $("#loadingOverlay").addClass("d-none");
+              return;
+              }
+              fileSha = null; // <-- Reset the sha, since we will be creating a new file
+            }
+          }
+
+          // Finally, add or update the file
           var uploadFileResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
             owner: username,
             repo: selectedRepo.repoName,
             path: finalPath,
-            message: `Add new file ${entry.file}`,
+            message: `${editMode ? "Modify" : "Add new"} file ${entry.file}`,
             content: fileBase64,
-            
+            sha: fileSha,
           }).catch((err) => {
             toast(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
           });
@@ -641,8 +679,10 @@
         $("#toastBody").text(message);
         t.show();
       }
-      function commaStringToArray(commaString){
-        return commaString.split(',').map(x => x.trim()).filter(x => x);
+      function toArray(v){
+        if(Array.isArray(v)) return v;
+        else if(typeof v === 'string') return v.split(',').map(x => x.trim()).filter(x => x);
+        else return [];
       }
 
       // Document ready
