@@ -31,6 +31,7 @@
       import { Octokit, App } from "https://esm.sh/octokit";
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
       import * as bootstrap from "bootstrap";
+      import { MMCategories } from "./js/mmcategories.js";
 
 
       var repos = []; // <-- Add here more repos, added by the user
@@ -194,7 +195,7 @@
           // Get the values from the song
           var isOOTRS = s.file.toLowerCase().endsWith(".ootrs");
           var categories = toArray(s.categories).map((c) => 
-            `<span class="badge rounded-pill border">${isOOTRS ? c : mmrsCategoryToText(c)}</span>`
+            `<span class="badge rounded-pill border">${isOOTRS ? c : MMCategories.toString(c)}</span>`
           );
           var isSelected = selections.includes(s.index);
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
@@ -228,25 +229,6 @@
             previewSong(s);
           });
         });
-      }
-
-
-      function mmrsCategoryToText(category){
-        switch(category){
-          case "0": return "Fields";
-          case "1": return "Towns";
-          case "2": return "Dungeons";
-          case "3": return "Indoors";
-          case "4": return "Minigame";
-          case "5": return "Action events";
-          case "6": return "Calm events";
-          case "7": return "Boss fights";
-          case "8": return "Item get";
-          case "9": return "Game over";
-          case "10": return "Area clear";
-          case "16": return "Special";
-          default: return "Unknown";
-        }
       }
 
       function toArray(v){

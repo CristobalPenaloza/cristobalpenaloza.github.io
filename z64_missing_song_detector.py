@@ -4,8 +4,6 @@ import zipfile
 import uuid
 import traceback
 
-# TODO: SHOULD WE REMOVE FROM THE DB THE MISSING FILES?
-
 def detectSongs():
     if not os.path.exists('z64musicpacker.properties'):
       print('This is not an Z64 repository | Missing z64musicpacker.properties file')
@@ -25,18 +23,31 @@ def detectSongs():
                 # First, check if the names and files are correct
                 # The database name has priority in this
                 for i, entry in enumerate(database):
-                    actualPath = entry['file']
-                    intendedPath = entry['game'] + '/' + entry['song'] + os.path.splitext(actualPath)[1]
-                    if intendedPath != actualPath:
-                        print('DIFFERENT PATH DETECTED')
-                        print('Intended path: ' + intendedPath)
-                        print('Actual path:   ' + entry['file'])
-                        print('Fixing... ')
 
-                        # Only rename it if we find it... It may have changed already!
-                        database[i]['file'] = intendedPath
-                        if os.path.isfile(os.path.join(binaries, actualPath)):
+                    # Check if the file is there...
+                    actualPath = entry['file']
+                    if os.path.isfile(os.path.join(binaries, actualPath)):
+                        
+                        # If the file exists, check if the path is the intended one
+                        intendedPath = entry['game'] + '/' + entry['song'] + os.path.splitext(actualPath)[1]
+                        if intendedPath != actualPath:
+                            print('DIFFERENT PATH DETECTED')
+                            print('Intended path: ' + intendedPath)
+                            print('Actual path:   ' + entry['file'])
+                            print('Fixing... ')
+
+                            # Only rename it if we find it... It may have changed already!
+                            database[i]['file'] = intendedPath
                             os.rename(os.path.join(binaries, actualPath), os.path.join(binaries, intendedPath))
+                    
+                    # If we don't find it, then remove it from the database
+                    # Still, evaluate if this is ok to do...
+                    else:
+                        print('MISSING ENTRY DETECTED')
+                        print('Path: ' + actualPath)
+                        print('Removing...')
+                        database.pop(i)
+
 
 
                 # Check every single file inside the binaries folder
