@@ -735,6 +735,14 @@
             return;
           }
 
+          // Check if is NOT songtest
+          var isSongtest = (game + " - " + song).toLowerCase().includes("songtest");
+          if(isSongtest){
+            $("#txtSongName, #txtGameName").each(function(){ this.setCustomValidity("invalid"); });
+            $("#txtSongName").siblings(".invalid-feedback").html(`The name of the game or song CANNOT contain the string <b>"songtest"</b>.`);
+            return;
+          }
+
           // Check if is duplicated
           // Ignore this requirement if we are editing an already existing song
           var isInDB = database.some(s => s.game == game && s.song == song);
