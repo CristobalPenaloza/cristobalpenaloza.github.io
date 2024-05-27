@@ -41,6 +41,43 @@
       var currentSongList = [];
 
 
+      function saveSettings(){
+        var settings = getSettings();
+
+        // Start by saving the selected repo
+        settings.selectedRepoId = selectedRepo.repoId;
+
+        // Now, save also the user selections for this current repo
+        var userRepos = settings.userRepos || [];
+        var uuidSelections = selections.map(i => database[i].uuid);
+        var repoIndex = userRepos.findIndex(r => r.id == selectedRepo.repoId);
+
+        // If we cant find the repo, just add it as a new one
+        // This should not happen tho...
+        if(repoIndex == -1) userRepos.push({
+          id: selectedRepo.repoId,
+          selections: uuidSelections,
+        });
+        else userRepos[repoIndex].selections = uuidSelections;
+        settings.userRepos = userRepos;
+        
+        // Finish the saving!
+        localStorage.settings = btoa(JSON.stringify(settings));
+        //console.log("Settings saved!");
+        //console.log(settings);
+      }
+      function getSettings(){
+        try{
+          return JSON.parse(atob(localStorage.settings));
+
+        // If we cannot load the settings, then we crate a new one
+        } catch(e){
+          // TODO: Default settings? Maybe here add the mainline repos, that everyone should have (DJ, MM repo I guess...)
+          return {};
+        }
+      }
+
+
       async function init(){
         // We don't need auth for the stuff we will be doing here...
         // const octokit = new Octokit();
@@ -48,16 +85,17 @@
 
 
         // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
+        var settings = getSettings();
         var userRepos = ["CristobalPenaloza/Z64PackerTestRepo/main", "CristobalPenaloza/OoT-Custom-Sequences/z64"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
         repos = [];
 
         // Load the properties from each repo
         // We do this every time, to always have the latest version of each one
-        await Promise.all(userRepos.map(async (userRepo) => {
-          var userRepoSplitted = userRepo.split("/");
-          var owner = userRepoSplitted[0];
-          var repo = userRepoSplitted[1];
-          var defaultBranch = userRepoSplitted[2];
+        await Promise.all(userRepos.map(async (id) => {
+          var idSplitted = id.split("/");
+          var owner = idSplitted[0];
+          var repo = idSplitted[1];
+          var defaultBranch = idSplitted[2];
 
           // Get the z64musicpacker.properties from this repo
           // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
@@ -75,6 +113,7 @@
               repoName: repo,
               repoOwner: owner,
               repoDefaultBranch: defaultBranch,
+              repoId: id,
 
               // Import Z64 music packer properties
               ...properties,
@@ -102,9 +141,9 @@
           });
         });
         
-        // TODO: SELECT THE FIRST REPO
-        // TODO: SELECT ALSO THE LAST REPO USED BY THE USER (STORED IN COOKIE)
-        selectedRepo = repos[0];
+        // Try to load the selected repo from the storage
+        var selectedRepoId = settings.selectedRepoId;
+        selectedRepo = repos.find(r => r.repoId == selectedRepoId) || repos[0];
 
         await loadRepo();
         $("#loadingOverlay").addClass("d-none");
@@ -129,8 +168,19 @@
             // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
             item.index = i;
           });
-          console.log(database);
+
+          // Get the saved selections
+          selections = [];
+          var settings = getSettings();
+          var userRepo = settings.userRepos.find(r => r.id == selectedRepo.repoId);
           
+          if(userRepo){
+            //console.log("Loading selections... ");
+            //console.log(userRepo);
+            var songIndices = database.filter((s) => userRepo.selections.includes(s.uuid)).map((s) => s.index);
+            selections.push(...songIndices);
+          }
+
           // Show the list of games to the user
           loadGamesList();
 
@@ -140,6 +190,9 @@
           // Close the repo selection modal if it's open
           var modalRepoSelection = bootstrap.Modal.getInstance('#modalRepoSelection');    
           modalRepoSelection?.hide();
+
+          // Save our selection in the settings
+          saveSettings();
         }
       }
 
@@ -332,7 +385,6 @@
         }
         $("#loadingOverlay").addClass("d-none");
       }
-
       async function downloadSongPack(){
         console.log(selections);
 
@@ -397,6 +449,16 @@
             else selections = selections.filter((s) => !songIndices.includes(s));
           });
           updateSelections();
+        });
+
+        $("#btnTheme").on("click", function(){
+          var theme = $("html").attr("data-bs-theme");
+          $("html").attr("data-bs-theme", theme == "dark" ? "light" : "dark");
+        });
+
+        $("#btnConfiguration").on("click", function(){
+          // TODO...
+          saveSettings();
         });
       });
     </script>
@@ -489,12 +551,15 @@
 
     <nav class="navbar navbar-expand-lg bg-body-tertiary" style="padding-left: 8px; height: 46.5px;">
       <a class="navbar-brand text-secondary" style="width: 242px" href="#">Z64 Song Packer</a>
-      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 ms-auto me-3">
+
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 ms-auto px-2">
         <div class="row g-2">
           <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="" />
           <b class="col mb-0"><span id="lbRepoName">Z64 Test Repo</span> <i class="fa-solid fa-caret-down"></i></b>
         </div>
       </button>
+      <i class="fa-solid fa-lg fa-moon nav-link ms-2 mt-1" style="cursor: pointer;" title="Theme" id="btnTheme"></i>
+      <i class="fa-solid fa-lg fa-cog nav-link mx-3 mt-1" style="cursor: pointer;" title="Configuration" id="btnConfiguration"></i>
     </nav>
 
     <div class="container mt-3">
@@ -514,7 +579,7 @@
                 </ul>
               </div>
             </div>
-            <div id="panelGames" class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 7.2rem)">
+            <div id="panelGames" class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 6.8rem)">
     
             </div>
           </div>
