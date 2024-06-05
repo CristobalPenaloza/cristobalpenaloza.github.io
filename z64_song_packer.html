@@ -36,8 +36,10 @@
 
       var repos = []; // <-- Add here more repos, added by the user
       var selectedRepo = null;
-      var database = [];
+      var database = []; // z64songs.json
+      var gamesDb = []; // z64games.json
       var selections = [];
+      var selectedSeries = [];
       var currentSongList = [];
 
 
@@ -72,8 +74,16 @@
 
         // If we cannot load the settings, then we crate a new one
         } catch(e){
-          // TODO: Default settings? Maybe here add the mainline repos, that everyone should have (DJ, MM repo I guess...)
-          return {};
+          // TODO: Add here the default loaded repos
+          return {
+            selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
+            userRepos: [
+              {
+                id: "CristobalPenaloza/Z64PackerTestRepo/main",
+                selections: [],
+              }
+            ],
+          };
         }
       }
 
@@ -86,7 +96,7 @@
 
         // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
         var settings = getSettings();
-        var userRepos = ["CristobalPenaloza/Z64PackerTestRepo/main", "CristobalPenaloza/OoT-Custom-Sequences/z64"]; // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF?
+        var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
         repos = [];
 
         // Load the properties from each repo
@@ -156,11 +166,23 @@
         // Set the main selector
         $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl);
         $("#lbRepoName").text(selectedRepo.name);
+        var rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
+
+        // Reset!
+        gamesDb = [];
+        database = [];
+
+        // Get the optional games database from the current repo
+        var gamesDbLink = rawLink + "z64games.json";
+        var gamesDbResponse = await fetch(gamesDbLink);
+        if(gamesDbResponse.ok){
+          gamesDb = await gamesDbResponse.json();
+          console.log(gamesDb);
+        }
 
         // Get the database from the current repo
-        var dbLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.database}`;
+        var dbLink = rawLink + "z64songs.json";
         var dbResponse = await fetch(dbLink);
-
         if(dbResponse.ok){
           // Load the database
           database = await dbResponse.json();
@@ -200,38 +222,129 @@
       function loadGamesList(){
         $("#panelGames").empty();
 
+        // TODO: WE NEED TO ORDER THIS STUFF
+        // Basically, we need the series together with the games that have no series
+        // Then, search for the games that ARE part of a series, and add them inside...
+        // I think we need to add a method that returns a game.
+
         // Get the games list, with no dupes
         var games = [...new Set(database.map(s => s.game))].sort();
-        games.forEach((game, i) => {
-          var songsOfGame = database.filter(s => s.game == game);
-          var songsChecked = songsOfGame.filter(s => selections.includes(s.index));
-          var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfGame.length ? "checked" : "indeterminate");
-          
-          // Append the game nav item
-          $("#panelGames").append(
-            `<div class="btn-game row g-0" id="btnGame${i}" data-game="${game}">
-              <input class="form-check-input col-auto" type="checkbox" value="" id="cbxGame${i}" ${checkState}/>
-              <span class="col ms-3">${game}</span>
-              <span class="col-auto me-4">${songsChecked.length}/${songsOfGame.length}</span>
-            </div>`
-          );
 
-          // Set the current state of the checkbox (we do it like this for the intermediate stuff)
-          if(checkState != "") $(`#cbxGame${i}`).prop(checkState, true);
+        // Get the series, and the games that have none
+        var series = gamesDb.map(g => g.series);
+        var gamesWithNoSeries = games.filter(game => {
+          var gData = gamesDb.find(g => g.game == game);
+          return !(gData?.series || "");
+        });
+        //console.log("Series:");
+        //console.log(series);
+        //console.log("Games with no series:");
+        //console.log(gamesWithNoSeries);
 
-          // Add handlers for the inputs
-          $(`#btnGame${i}`).on("click", function(){
-            loadSongsList(songsOfGame);
-          });
-          $(`#cbxGame${i}`).on("click", function(e){
-            e.stopPropagation(); // We don't want to hit the button underneath...
-            var songIndices = database.filter((s) => s.game == game).map((s) => s.index);
-            if(this.checked) selections.push(...songIndices);
-            else selections = selections.filter((s) => !songIndices.includes(s));
-            updateSelections();
-          });
+        // And now, combine them both!
+        var gamesAndSeries = [...new Set(series.concat(gamesWithNoSeries))].sort();
+        //console.log("Games + series:");
+        //console.log(gamesAndSeries);
+
+        gamesAndSeries.forEach((game, i) => {
+
+          // If this a series...
+          var isSeries = series.includes(game);
+          if(isSeries) {
+            var isSelected = selectedSeries.some(s => s == i);
+            var songsOfSeries = database.filter(s => {
+              var gData = gamesDb.find(g => g.game == s.game);
+              return gData?.series == game;
+            });
+            var songsChecked = songsOfSeries.filter(s => selections.includes(s.index));
+            var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfSeries.length ? "checked" : "indeterminate");
+
+            // Append the series collapse nav item
+            $("#panelGames").append(
+              `<div class="btn-series row g-0 ${isSelected ? "active" : ""}" id="btnSeries${i}" data-series="${game}">
+                <input class="form-check-input col-auto" type="checkbox" value="" id="cbxSeries${i}" ${checkState}/>
+                <span class="col ms-3">${game}</span>
+                <span class="col-auto me-2">${songsChecked.length}/${songsOfSeries.length}</span>
+                <i class="col-auto fa-solid fa-caret-down me-2 mt-1"></i>
+              </div>
+              <div class="collapse collapse-series" id="collapseSeries${i}"></div>`
+            );
+
+            // Set the current state of the checkbox (we do it like this for the intermediate stuff)
+            if(checkState != "") $(`#cbxSeries${i}`).prop(checkState, true);
+            
+            // Now, add every game inside the accordion
+            var gamesOfSeries = gamesDb.filter(g => g.series == game).map(g => g.game);
+            gamesOfSeries.forEach((gameOfSeries, l) => {
+              createGameNavItem(`#collapseSeries${i}`, gameOfSeries, `${i}_${l}`);
+            });
+
+            // Create the collapse element initially closed up, and check if it's selected
+            var collapse = bootstrap.Collapse.getOrCreateInstance(`#collapseSeries${i}`, { toggle: false });
+            $(`#collapseSeries${i}`).toggleClass("show", isSelected);
+
+            // Add a handler for this checkbox
+            $(`#cbxSeries${i}`).on("click", function(e){
+              e.stopPropagation(); // We don't want to hit the series button underneath...
+              var songIndices = songsOfSeries.map((s) => s.index);
+              updateSelections(songIndices, this.checked);
+            });
+            
+            // Add a handler for opening and closing the series
+            $(`#btnSeries${i}`).on("click", function(){
+              var isOpen = $(`#collapseSeries${i}`).hasClass("show");
+              
+              // Try to close the series...
+              if(isOpen){
+                collapse.hide();
+                selectedSeries = selectedSeries.filter(seriesIndex => seriesIndex != i);
+                $(this).removeClass("active");
+
+              // Or try to open the series...
+              } else{
+                collapse.show();
+                selectedSeries.push(i);
+                $(this).addClass("active");
+              }
+            });
+
+
+          // If this is a standalone game...
+          } else{
+            createGameNavItem("#panelGames", game, i);
+          }
         });
       }
+      function createGameNavItem(panelId, game, i){
+        var isPartOfSeries = ("" + i).includes("_");
+        var songsOfGame = database.filter(s => s.game == game);
+        var songsChecked = songsOfGame.filter(s => selections.includes(s.index));
+        var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfGame.length ? "checked" : "indeterminate");
+        
+        // Append the game nav item
+        $(panelId).append(
+          `<div class="btn-game row g-0" id="btnGame${i}" data-game="${game}">
+            ${isPartOfSeries ? `<i class="fa-solid fa-rotate-90 fa-arrow-turn-up col-auto me-3 opacity-50" style="margin-left: .3rem"></i>` : ""}
+            <input class="form-check-input col-auto" type="checkbox" value="" id="cbxGame${i}" ${checkState}/>
+            <span class="col ms-3">${game}</span>
+            <span class="col-auto me-4">${songsChecked.length}/${songsOfGame.length}</span>
+          </div>`
+        );
+
+        // Set the current state of the checkbox (we do it like this for the intermediate stuff)
+        if(checkState != "") $(`#cbxGame${i}`).prop(checkState, true);
+
+        // Add handlers for the inputs
+        $(`#btnGame${i}`).on("click", function(){
+          loadSongsList(songsOfGame);
+        });
+        $(`#cbxGame${i}`).on("click", function(e){
+          e.stopPropagation(); // We don't want to hit the button underneath...
+          var songIndices = database.filter((s) => s.game == game).map((s) => s.index);
+          updateSelections(songIndices, this.checked);
+        });
+      }
+
       function loadSongsList(songs){
         currentSongList = songs;
         var games = [...new Set(songs.map(s => s.game))];
@@ -353,7 +466,13 @@
         $("#panelSongs").toggleClass("hide-categories", !$("#cbxViewCategories").is(":checked"));
         $("#panelSongs").toggleClass("hide-format", !$("#cbxViewFormat").is(":checked"));
       }
-      function updateSelections(){
+      function updateSelections(indices = [], add = true){
+        // Add or remove the provided indices
+        if(indices.length > 0){
+          if(add) selections.push(...indices);
+          else selections = selections.filter((s) => !indices.includes(s));
+        }
+
         // Make sure there is no duplicates
         selections = [...new Set(selections)];
 
@@ -482,7 +601,7 @@
         left: 47%;
       }
 
-      .btn-game{
+      .btn-game, .btn-series{
         color: var(--nav-lateral-text);
         width: 100%;
         text-decoration: none;
@@ -490,7 +609,7 @@
         transition: .1s;
         cursor: pointer;
       }
-      .btn-game:hover{
+      .btn-game:hover, .btn-series:hover, .btn-series.active:hover{
         color: var(--bs-primary-text-emphasis);
         background-color: rgba(0,0,0,.2);
       }
@@ -500,6 +619,16 @@
         background-color: var(--bs-primary-bg-subtle);
         border-left: 3px solid var(--bs-primary-text-emphasis);
       }
+
+
+      .btn-series.active{
+        background-color: rgba(0,0,0,.0);
+      }
+      .collapse-series {
+
+        background-color: rgba(0,0,0,.12);
+      }
+
 
       .btn-song{
         padding: .4rem;
@@ -525,7 +654,6 @@
       #panelSongs.hide-format .format{
         display: none;
       }
-
 
       .responsive-iframe {
         position: relative;

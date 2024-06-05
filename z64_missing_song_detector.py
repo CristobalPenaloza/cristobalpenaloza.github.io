@@ -16,8 +16,14 @@ def detectSongs():
         # Pack all the files in a single zip, to provide a faster download in the web tool
         with zipfile.ZipFile('binaries.zip', 'w', zipfile.ZIP_DEFLATED) as binariesZip:
 
+            # Try to create necessary files
+            if not os.path.exists('z64songs.json'):
+                with open('z64songs.json', 'w+') as f: f.write('[]')
+            if not os.path.exists('z64games.json'):
+                with open('z64games.json', 'w+') as f: f.write('[]')
+
             # Open the database, so we can modify it
-            with open(properties['database'], 'r+') as databaseFile:
+            with open('z64songs.json', 'r+') as databaseFile:
                 database = json.load(databaseFile)
                 
                 # First, check if the names and files are correct
@@ -163,7 +169,6 @@ def extractMetadataFromMMRS(path) -> tuple[str, list, bool, bool]:
                 usesCustomSamples = any(n.endswith('.zsound') for n in namelist)
 
                 return seq_type, categories, usesCustomBank, usesCustomSamples
-
 
 def main():
     result = detectSongs()
