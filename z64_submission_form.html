@@ -782,14 +782,19 @@
 
         <!-- AUTHORIZATION -->
         <div class="card bg-body-tertiary col p-3" style="max-width: 500px;" id="panelAuthorization">
-          <h5>Authorization</h5>
-          <p>This tools works by using the GitHub API to create commits and pull requests for you.</p>
+          <h5>Welcome to Z64 Submission Form!</h5>
+          <p>This is a tool for uploading custom Zelda 64 sequences to music repositories for the randomizer use.</p>
+          <p class="opacity-50">If you just want to download songs, go to the <a target="_blank" href="https://cristobalpenaloza.github.io/z64_song_packer.html">Z64 Song Packer</a>.</p>
+
+          <hr>
+
 
           <div class="form-group mb-3">
             <label>GitHub authorization token:</label>
             <p class="hint">The token with access to the fork of the repository you are trying to send this file.</p>
             <input type="text" id="txtGithubAuthToken" class="form-control" placeholder="github_pat_xxxxx... or ghp_xxxxx..." />
           </div>
+          <p class="opacity-50">Don't know how to get an authorization token?<br>Then you need to see <a target=”_blank” href="https://github.com/CristobalPenaloza/cristobalpenaloza.github.io/wiki/Submitting-a-song-to-a-Z64-repository">this guide</a>!</p>
 
           <button type="button" class="btn btn-primary" id="btnLogin">Login</button>
         </div>
@@ -801,6 +806,8 @@
           <p>Select the repository you will be submitting a new music track.</p>
           <div class="container" id="containerRepo">
           </div>
+
+          <p class="opacity-50">Can't see the repository you want to upload your song?<br>Then you need to see <a target=”_blank” href="https://github.com/CristobalPenaloza/cristobalpenaloza.github.io/wiki/Submitting-a-song-to-a-Z64-repository#2-fork-the-music-repository">this guide</a>, in the "Fork the music repository" section.</p>
         </div>
 
 
