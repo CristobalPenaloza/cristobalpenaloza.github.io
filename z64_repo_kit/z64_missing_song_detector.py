@@ -3,6 +3,7 @@ import os
 import zipfile
 import uuid
 import traceback
+from pathlib import Path
 
 def detectSongs():
     if not os.path.exists('z64musicpacker.properties'):
@@ -22,103 +23,172 @@ def detectSongs():
             if not os.path.exists('z64games.json'):
                 with open('z64games.json', 'w+') as f: f.write('[]')
 
-            # Open the database, so we can modify it
-            with open('z64songs.json', 'r+') as databaseFile:
-                database = json.load(databaseFile)
-                
-                # First, check if the names and files are correct
-                # The database name has priority in this
-                for i, entry in enumerate(database):
 
-                    # Check if the file is there...
-                    actualPath = entry['file']
-                    if os.path.isfile(os.path.join(binaries, actualPath)):
-                        
-                        # If the file exists, check if the path is the intended one
-                        intendedPath = entry['game'] + '/' + entry['song'] + os.path.splitext(actualPath)[1]
-                        if intendedPath != actualPath:
-                            print('DIFFERENT PATH DETECTED')
-                            print('Intended path: ' + intendedPath)
-                            print('Actual path:   ' + entry['file'])
-                            print('Fixing... ')
+            # First, open the games database
+            with open('z64games.json', 'r+') as gamesFile:
+                print("OPENING GAME DATABASE FILE")
+                games = json.load(gamesFile)
 
-                            # Only rename it if we find it... It may have changed already!
-                            database[i]['file'] = intendedPath
-                            os.rename(os.path.join(binaries, actualPath), os.path.join(binaries, intendedPath))
+                # Open the database, so we can modify it
+                with open('z64songs.json', 'r+') as databaseFile:
+                    print("OPENING SONG DATABASE FILE")
+                    database = json.load(databaseFile)
                     
-                    # If we don't find it, then remove it from the database
-                    # Still, evaluate if this is ok to do...
-                    else:
-                        print('MISSING ENTRY DETECTED')
-                        print('Path: ' + actualPath)
-                        print('Removing...')
-                        database.pop(i)
+                    # First, check if the names and files are correct
+                    # The database name has priority in this
+                    for i, entry in enumerate(database):
+
+                        # Check if the file is there...
+                        actualPath = entry['file']
+                        if os.path.isfile(os.path.join(binaries, actualPath)):
+                            
+                            # This commented snippet is for giving priority to the folder-file structure.
+                            # But that's impossible, since if a file is renamed, we cannot know to which one it corresponds!
+                            # So, if a file is renamed, it will be eliminated, and then readded.
+                            # The only way to edit game names, is thru the submission form, or directly inside the database.
+
+                            # pathSplitted = actualPath.split('/')
+                            # for index, pathSection in enumerate(reversed(pathSplitted)):
+                            #    # Change the song name if the filename is different
+                            #    if index == 0 and entry["song"] != Path(pathSection).stem:
+                            #        print("DIFFERENT SONG NAME DETECTED")
+                            #        print("Renaming: " + entry["song"] + " -> " + Path(pathSection).stem)
+                            #        database[i]["song"] = Path(pathSection).stem
+                            #    # Change the game name if the folder is different
+                            #    if index == 1 and entry["game"] != pathSection:
+                            #        print("DIFFERENT GAME NAME DETECTED")
+                            #        print("Renaming: " + entry["game"] + " -> " + pathSection)
+                            #        database[i]["game"] = pathSection
+                            #    # Setup the series if there are a folder up this one
+                            #    # else: games ...
+
+                            # If the path in the folder structure, change it on the database!
+
+                            # TODO: HERE WE NEED TO ADD THE SERIES TO THE INTENDED PATH
+
+                            print("Checking name")
+                            #intendedPath = entry['game'] + '/' + entry['song'] + os.path.splitext(actualPath)[1]
+                            #if intendedPath != actualPath:
+                            #    print("DIFFERENT PATH DETECTED")
+                            #    print("Renaming: " + entry["file"] + " -> " + intendedPath)
+
+                            #    # Only rename it if we find it... It may have changed already!
+                            #    database[i]['file'] = intendedPath
+                            #    os.renames(os.path.join(binaries, actualPath), os.path.join(binaries, intendedPath))
 
 
+                        
+                        # If we don't find it, then remove it from the database
+                        # Still, evaluate if this is ok to do...
+                        else:
+                            print('MISSING ENTRY DETECTED')
+                            print('Path: ' + actualPath)
+                            print('Removing...')
+                            database.pop(i)
 
-                # Check every single file inside the binaries folder
-                songs = os.walk(binaries)
-                for dirpath, dirnames, filenames in songs:
-                    directory = dirpath.replace(binaries, '')
 
-                    # Remove empty folders
-                    if len(os.listdir(dirpath)) == 0:
-                        print("EMPTY FOLDER DETECTED")
-                        print("Folder: " + dirpath)
-                        print("Clean up... Clean up...")
-                        os.rmdir(dirpath)
-                        continue
+                    # Check every single file inside the binaries folder
+                    songs = os.walk(binaries)
+                    for dirpath, dirnames, filenames in songs:
+                        directory = dirpath.replace(binaries, '')
 
-                    # Check every single file inside this  folder
-                    for filename in filenames:
-                        try:
-                            # Only check ootrs and mmrs files
-                            if not filename.endswith('.ootrs') and not filename.endswith('.mmrs'): continue
+                        # Remove empty folders
+                        if len(os.listdir(dirpath)) == 0:
+                            print("EMPTY FOLDER DETECTED")
+                            print("Folder: " + dirpath)
+                            print("Clean up... Clean up...")
+                            os.rmdir(dirpath)
+                            continue
 
-                            # Extract data from the file
-                            type, categories, usesCustomBank, usesCustomSamples = extractMetadata(os.path.join(dirpath, filename))
+                        # Check every single file inside this  folder
+                        for filename in filenames:
+                            try:
+                                # Only check ootrs and mmrs files
+                                if not filename.endswith('.ootrs') and not filename.endswith('.mmrs'): continue
 
-                            # Check if the file is in the database
-                            fullPath = os.path.join(directory, filename).replace("\\","/")
-                            detectedInDatabase = any(x["file"] == fullPath for x in database)
+                                # Extract data from the file
+                                type, categories, usesCustomBank, usesCustomSamples = extractMetadata(os.path.join(dirpath, filename))
 
-                            # If the file is in the DB, instead check it's integrity
-                            if detectedInDatabase:
-                                print('Updating file on DB: ' + fullPath)
-                                i = [x["file"] for x in database].index(fullPath)
-                                database[i]["type"] = type
-                                database[i]["categories"] = categories
-                                database[i]["usesCustomBank"] = usesCustomBank
-                                database[i]["usesCustomSamples"] = usesCustomSamples
+                                # GAME MANAGEMENT
+                                # Update the games database
+                                directories = directory.replace("\\","/").split('/')
+                                game = safe_list_get(directories, -1, "Unknown")
+                                series = safe_list_get(directories, -2, "") # We only go 1 up the directories... We don't support series in series
+                                gameIndex = safe_list_index([x["game"] for x in games], game)
+                                
+                                # If it's not in the list, just add it
+                                if gameIndex == None:
+                                    print('Adding missing game to DB: ' + game + ' | ' + series)
+                                    games.append({
+                                        "game": game,
+                                        "series": series,
+                                        "platforms": [],
+                                        "abbrName": game
+                                    })
+                                # If it's in the list, update it's series to match the folder structure
+                                else:
+                                    print('Updating game to series: ' + series)
+                                    games[gameIndex]["series"] = series
 
-                            # If is not there, add it!
-                            else:
-                                print('Adding missing file to DB: ' + fullPath)
-                                database.append({
-                                    'game': directory.replace("\\","/").split('/')[-1],
-                                    'song': filename.replace('.ootrs', '').replace('.mmrs', ''),
-                                    'type': type,
-                                    'categories': categories,
-                                    'usesCustomBank': usesCustomBank,
-                                    'usesCustomSamples': usesCustomSamples,
-                                    'uuid': str(uuid.uuid4()),
-                                    'file': fullPath
-                                })
 
-                            # Add this file to the main zip
-                            osPath = os.path.join(dirpath, filename)
-                            binariesZip.write(osPath)
+                                # SONG MANAGEMENT
+                                # Check if the file is in the database
+                                fullPath = os.path.join(directory, filename).replace("\\","/")
+                                detectedInDatabase = any(x["file"] == fullPath for x in database)
 
-                        except Exception:
-                            print("An error ocurred while processing the file " + filename + ": " + traceback.format_exc())
+                                # If the file is in the DB, instead check it's integrity
+                                if detectedInDatabase:
+                                    print('Updating file on DB: ' + fullPath)
+                                    i = [x["file"] for x in database].index(fullPath)
+                                    database[i]["type"] = type
+                                    database[i]["categories"] = categories
+                                    database[i]["usesCustomBank"] = usesCustomBank
+                                    database[i]["usesCustomSamples"] = usesCustomSamples
 
-                # Replace database with this one
-                databaseFile.seek(0)
-                json.dump(database, databaseFile, indent=2)
-                databaseFile.truncate()
+                                # If is not there, add it!
+                                else:
+                                    print('Adding missing file to DB: ' + fullPath)
+                                    database.append({
+                                        'game': game,
+                                        'song': filename.replace('.ootrs', '').replace('.mmrs', ''),
+                                        'type': type,
+                                        'categories': categories,
+                                        'usesCustomBank': usesCustomBank,
+                                        'usesCustomSamples': usesCustomSamples,
+                                        'uuid': str(uuid.uuid4()),
+                                        'file': fullPath
+                                    })
+
+                                # Add this file to the main zip
+                                osPath = os.path.join(dirpath, filename)
+                                binariesZip.write(osPath)
+
+                            except Exception:
+                                print("An error ocurred while processing the file " + filename + ": " + traceback.format_exc())
+
+                    # Replace song database with this one
+                    databaseFile.seek(0)
+                    json.dump(database, databaseFile, indent=2)
+                    databaseFile.truncate()
+
+                 # Replace game database with this one
+                gamesFile.seek(0)
+                json.dump(games, gamesFile, indent=2)
+                gamesFile.truncate()
 
     return True
 
+def safe_list_get(list, idx, default):
+  try:
+    return list[idx]
+  except IndexError:
+    return default
+  
+def safe_list_index(iterable, value, default = None):
+    for i, item in enumerate(iterable):
+        if item == value:
+            return i
+    return default
 
 def extractMetadata(path) -> tuple[str, list, bool, bool]:
     isOOTRS = path.endswith('.ootrs')
@@ -179,3 +249,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
