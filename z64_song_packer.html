@@ -183,7 +183,7 @@
         var gamesDbResponse = await fetch(gamesDbLink);
         if(gamesDbResponse.ok){
           gamesDb = await gamesDbResponse.json();
-          console.log(gamesDb);
+          //console.log(gamesDb);
         }
 
         // Get the database from the current repo
@@ -227,6 +227,7 @@
 
       function loadGamesList(){
         $("#panelGames").empty();
+        var searchFilter = $("#txtSearchGames").val();
 
         // TODO: WE NEED TO ORDER THIS STUFF
         // Basically, we need the series together with the games that have no series
@@ -235,6 +236,9 @@
 
         // Get the games list, with no dupes
         var games = [...new Set(database.map(s => s.game))].sort();
+
+        // Now filter the game list
+        games = games.filter(g => g.toLowerCase().includes(searchFilter.toLowerCase()));
 
         // Get the series, and the games that have none
         var series = gamesDb.map(g => g.series).filter(series => series);
@@ -252,6 +256,12 @@
         //console.log("Games + series:");
         //console.log(gamesAndSeries);
 
+        // And filter them
+        // TODO: Make a filter that includes games inside a series! That would be hard I think
+        // TODO: That would need to interfere the GAMES collection, and then get the series by that
+        //gamesAndSeries = gamesAndSeries.filter(gs => gs.toLowerCase().includes(searchFilter.toLowerCase()));
+
+        // Now, loop everything and add it to the list
         gamesAndSeries.forEach((game, i) => {
 
           // If this a series...
@@ -259,11 +269,30 @@
           if(isSeries) {
             var isSelected = selectedSeries.some(s => s == i);
             var songsOfSeries = database.filter(s => {
+              // First, do not bring any song that doesn't match with the main game filter
+              if(!s.game.toLowerCase().includes(searchFilter.toLowerCase())) return false;
+
+              // Now, try to get the series of this game
               var gData = gamesDb.find(g => g.game == s.game);
               return gData?.series == game;
             });
+
+            // If this series is empty, then we skip it
+            if(songsOfSeries.length == 0) return;
+
             var songsChecked = songsOfSeries.filter(s => selections.includes(s.index));
             var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfSeries.length ? "checked" : "indeterminate");
+
+            // Set the current state of the checkbox (we do it like this for the intermediate stuff)
+            
+            if(checkState != "") $(`#cbxSeries${i}`).prop(checkState, true);
+            
+            // Filter the games inside this series
+            var gamesOfSeries = gamesDb.filter(g => g.series == game).map(g => g.game).sort();
+            gamesOfSeries = gamesOfSeries.filter(g => g.toLowerCase().includes(searchFilter.toLowerCase()));
+
+            // If there are no games inside this series, then skip it
+            if(gamesOfSeries.length == 0) return;
 
             // Append the series collapse nav item
             $("#panelGames").append(
@@ -276,11 +305,7 @@
               <div class="collapse collapse-series" id="collapseSeries${i}"></div>`
             );
 
-            // Set the current state of the checkbox (we do it like this for the intermediate stuff)
-            if(checkState != "") $(`#cbxSeries${i}`).prop(checkState, true);
-            
             // Now, add every game inside the accordion
-            var gamesOfSeries = gamesDb.filter(g => g.series == game).map(g => g.game);
             gamesOfSeries.forEach((gameOfSeries, l) => {
               createGameNavItem(`#collapseSeries${i}`, gameOfSeries, `${i}_${l}`);
             });
@@ -356,23 +381,24 @@
         var games = [...new Set(songs.map(s => s.game))];
 
         // Cleanup the panel and select the games selected for this song list
-        $("#panelSongs").empty();
+        $("#panelSongs, #panelFanfares").empty();
         $(".btn-game").removeClass("active");
         $("#lbTitleSongs").text(games.join(", "));
         games.forEach(game => $(`.btn-game[data-game="${game}"]`).addClass("active"));
-
+        
         // Show the song list to the user
         songs.sort((a, b) => a.song.localeCompare(b.song)).forEach((s, i) => {
 
           // Get the values from the song
           var isOOTRS = s.file.toLowerCase().endsWith(".ootrs");
+          var isFanfare = s.type.toLowerCase() == "fanfare";
           var categories = toArray(s.categories).map((c) => 
             `<span class="badge rounded-pill border">${isOOTRS ? c : MMCategories.toString(c)}</span>`
           );
           var isSelected = selections.includes(s.index);
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
 
-          $("#panelSongs").append(
+          $(isFanfare ? "#panelFanfares" : "#panelSongs").append(
             `<div class="col-3">
               <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                 <div class="row align-items-center g-2">
@@ -409,6 +435,9 @@
             if(hasPreview) previewSong(s);
           });
         });
+
+        // Check if any of the lists are emptt
+        // TODO: TODOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
       }
 
       function toArray(v){
@@ -468,9 +497,9 @@
 
 
       function updateSongViewOptions(){
-        $("#panelSongs").toggleClass("hide-metadata", !$("#cbxViewMetadata").is(":checked"));
-        $("#panelSongs").toggleClass("hide-categories", !$("#cbxViewCategories").is(":checked"));
-        $("#panelSongs").toggleClass("hide-format", !$("#cbxViewFormat").is(":checked"));
+        $("#panelSongView").toggleClass("hide-metadata", !$("#cbxViewMetadata").is(":checked"));
+        $("#panelSongView").toggleClass("hide-categories", !$("#cbxViewCategories").is(":checked"));
+        $("#panelSongView").toggleClass("hide-format", !$("#cbxViewFormat").is(":checked"));
       }
       function updateSelections(indices = [], add = true){
         // Add or remove the provided indices
@@ -585,6 +614,10 @@
           // TODO...
           saveSettings();
         });
+
+        $("#txtSearchGames").on("input", function(){
+          loadGamesList();
+        });
       });
     </script>
 
@@ -650,13 +683,13 @@
         background-color: var(--bs-primary-bg-subtle);
         border-color: var(--bs-primary-text-emphasis);
       }
-      #panelSongs.hide-metadata .metadata{
+      #panelSongView.hide-metadata .metadata{
         display: none;
       }
-      #panelSongs.hide-categories .categories{
+      #panelSongView.hide-categories .categories{
         display: none;
       }
-      #panelSongs.hide-format .format{
+      #panelSongView.hide-format .format{
         display: none;
       }
 
@@ -675,6 +708,18 @@
         width: 100%;
         height: 100%;
       }
+
+      #txtSearchGames{
+        font-size: 1.25rem;
+        background-color: transparent;
+        border-color: transparent;
+        font-weight: 500;
+        line-height: 1.2;
+        margin: 0;
+        border-radius: var(--bs-border-radius);
+        transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+      }
+
     </style>
 
     
@@ -699,9 +744,12 @@
       <div class="row g-3">
         <div class="col-4">
           <div class="card bg-body-tertiary py-3">
-            <div class="row g-0 px-3 pb-3 border-bottom">
-              <input class="form-check-input col-auto me-3" type="checkbox" id="cbxSelectAll"/>
-              <h5 class="col mb-0">Games list:</h5>
+            <div class="row align-items-center g-0 px-3 pb-3 border-bottom">
+              <input class="form-check-input col-auto mt-0" type="checkbox" id="cbxSelectAll"/>
+
+              <input type="text" id="txtSearchGames" placeholder="Games list" class="col mx-2 px-2">
+              <i class="fa-solid fa-search col-auto me-3"></i>
+
               <div class="nav-item dropdown col-auto ms-auto">
                 <button id="btnDownload" type="button" class="btn btn-link nav-link dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">
                   <i class="fa-solid fa-download"></i>
@@ -755,8 +803,17 @@
               </div>
             </div>
             <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
-              <div id="panelSongs" class="row px-3 pt-3 g-2">
-    
+              <div id="panelSongView">
+                <h5 class="mb-0 ms-3 mt-3">BGMs</h5>
+                <div id="panelSongs" class="row px-3 pt-3 g-2">
+
+                </div>
+                
+                <hr>
+                <h5 class="mb-0 ms-3">Fanfares</h5>
+                <div id="panelFanfares" class="row px-3 pt-3 g-2">
+
+                </div>
               </div>
             </div>
           </div>
