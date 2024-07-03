@@ -212,6 +212,27 @@
           // Show the list of games to the user
           loadGamesList();
 
+          // Now load the filters
+          var musicGroups = [...new Set(database.map(s => s.game))].sort();
+
+          $("#ddlFilterComposers").empty().append($("<option>", { value: "", text: "Any" }));
+          var composers = [...new Set(database.map(s => s.composers).concat(["Unknown"]).flat().filter(c => c))].sort();
+          composers.forEach(composer => {
+            $("#ddlFilterComposers").append($("<option>", {
+              value: composer,
+              text: composer
+            }));
+          });
+
+          $("#ddlFilterConverters").empty().append($("<option>", { value: "", text: "Any" }));
+          var converters = [...new Set(database.map(s => s.converters).concat(["Unknown"]).flat().filter(c => c))].sort();
+          converters.forEach(converter => {
+            $("#ddlFilterConverters").append($("<option>", {
+              value: converter,
+              text: converter
+            }));
+          });
+
           // We finish the loading
           $("#loadingOverlay").addClass("d-none");
 
@@ -284,7 +305,7 @@
             var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfSeries.length ? "checked" : "indeterminate");
 
             // Set the current state of the checkbox (we do it like this for the intermediate stuff)
-            
+
             if(checkState != "") $(`#cbxSeries${i}`).prop(checkState, true);
             
             // Filter the games inside this series
@@ -709,7 +730,10 @@
         height: 100%;
       }
 
-      #txtSearchGames{
+      .search-input{
+        position: relative;
+      }
+      .search-input input{
         font-size: 1.25rem;
         background-color: transparent;
         border-color: transparent;
@@ -718,6 +742,26 @@
         margin: 0;
         border-radius: var(--bs-border-radius);
         transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+        width: 100%;
+      }
+      .search-input::after{
+        content: "\f002";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        position: absolute;
+        top: 3px;
+        right: 10px;
+        pointer-events: none;
+      }
+
+
+      .btn-search{
+        border: var(--bs-border-width) solid var(--bs-border-color);
+        font-size: 1rem;
+        padding: .4rem 0;
+      }
+      .btn-search:hover{
+        border: var(--bs-border-width) solid var(--bs-border-color);
       }
 
     </style>
@@ -729,8 +773,16 @@
 
     <nav class="navbar navbar-expand-lg bg-body-tertiary" style="padding-left: 8px; height: 46.5px;">
       <a class="navbar-brand text-secondary" style="width: 242px" href="#">Z64 Song Packer</a>
-
-      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 ms-auto px-2">
+      
+      <div class="mx-auto">
+        <button type="button" id="btnSearch" class="btn btn-search px-2" data-bs-toggle="modal" data-bs-target="#modalFilter">
+          <i class="fa-solid fa-search"></i>
+          <span class="me-3">Search the repository</span>
+          <i class="fa-solid fa-list"></i>
+        </button>
+      </div>
+      <span class="mx-1 opacity-25">|</span>
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 px-2">
         <div class="row g-2">
           <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="" />
           <b class="col mb-0"><span id="lbRepoName">Z64 Test Repo</span> <i class="fa-solid fa-caret-down"></i></b>
@@ -747,8 +799,9 @@
             <div class="row align-items-center g-0 px-3 pb-3 border-bottom">
               <input class="form-check-input col-auto mt-0" type="checkbox" id="cbxSelectAll"/>
 
-              <input type="text" id="txtSearchGames" placeholder="Games list" class="col mx-2 px-2">
-              <i class="fa-solid fa-search col-auto me-3"></i>
+              <div class="col mx-2 search-input">
+                <input type="text" id="txtSearchGames" placeholder="Games list" class="px-2">
+              </div>
 
               <div class="nav-item dropdown col-auto ms-auto">
                 <button id="btnDownload" type="button" class="btn btn-link nav-link dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">
@@ -785,7 +838,8 @@
   
         <div class="col-8">
           <div class="card bg-body-tertiary py-3">
-            <h5 class="ps-3 pb-3 mb-0 border-bottom" id="lbTitleSongs">Songs view</h5>
+            <h5 class="mb-0 border-bottom px-3 pb-3" id="lbTitleSongs">Songs view</h5>
+
             <div id="panelSongViewOptions" class="border-bottom py-2 px-3">
               <div class="form-check form-check-inline form-switch">
                 <input class="form-check-input" type="checkbox" id="cbxViewMetadata" checked>
@@ -805,21 +859,92 @@
             <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
               <div id="panelSongView">
                 <h5 class="mb-0 ms-3 mt-3">BGMs</h5>
-                <div id="panelSongs" class="row px-3 pt-3 g-2">
-
-                </div>
+                <div id="panelSongs" class="row px-3 pt-3 g-2"></div>
                 
                 <hr>
                 <h5 class="mb-0 ms-3">Fanfares</h5>
-                <div id="panelFanfares" class="row px-3 pt-3 g-2">
-
-                </div>
+                <div id="panelFanfares" class="row px-3 pt-3 g-2"></div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+
+
+    <!-- MODAL FILTER -->
+    <div class="modal fade" id="modalFilter" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5">Filter</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body row g-3">
+            <div class="form-group col-md-6 mb-3">
+              <label>Song name:</label>
+              <input id="txtFilterSongName" type="text" class="form-control" />
+            </div>
+            <div class="form-group col-md-6 mb-3">
+              <label>Game name:</label>
+              <input id="txtFilterGameName" type="text" class="form-control"/>
+            </div>
+
+            <div class="form-group col-md-6 mb-3">
+              <label>Sequence type:</label>
+              <select id="ddlFilterSequenceType" class="form-select">
+                <option value="">Any</option>
+                <option value="bgm">Background music</option>
+                <option value="fanfare">Fanfare</option>
+              </select>
+            </div>
+            <div class="form-group col-md-6 mb-3">
+              <label>Music groups:</label>
+              <select id="ddlFilterMusicGroups" class="form-select">
+                <option value="">Any</option>
+              </select>
+            </div>
+
+            <div class="form-group col-md-6 mb-3">
+              <label>Composers:</label>
+              <select id="ddlFilterComposers" class="form-select">
+                <option value="">Any</option>
+              </select>
+            </div>
+            <div class="form-group col-md-6 mb-3">
+              <label>Converters:</label>
+              <select id="ddlFilterConverters" class="form-select">
+                <option value="">Any</option>
+              </select>
+            </div>
+
+            <div class="form-group col-12 mb-3">
+              <label>Format:</label>
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="cbxFilterVanillaBank" checked>
+                <label class="form-check-label" for="cbxFilterVanillaBank">Uses vanilla bank only</label>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="cbxFilterCustomBank" checked>
+                <label class="form-check-label" for="cbxFilterCustomBank">Uses a custom bank</label>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="cbxFilterCustomSamples" checked>
+                <label class="form-check-label" for="cbxFilterCustomSamples">Uses a custom bank and samples</label>
+              </div>
+            </div>
+
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link">Reset</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary">Apply filters</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
 
 
     <!-- REPO SELECT -->
@@ -831,7 +956,7 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body text-center" id="panelRepoSelection">
-
+            
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -868,6 +993,7 @@
       </div>
     </div>
 
+    
 
 
   </body>
