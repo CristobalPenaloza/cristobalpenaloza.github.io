@@ -41,7 +41,7 @@
       var selections = [];
       var selectedSeries = [];
       var currentSongList = [];
-
+      var filteredDatabase = [];
 
       function saveSettings(){
         var settings = getSettings();
@@ -196,6 +196,7 @@
             // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
             item.index = i;
           });
+          filteredDatabase = database;
 
           // Get the saved selections
           selections = [];
@@ -245,10 +246,48 @@
         }
       }
 
+      function resetFilters(){
+        $("#txtFilterGameName").val("");
+        $("#txtFilterSongName").val("");
+        $("#ddlFilterSequenceType").val("");
+        $("#ddlFilterMusicGroups").val("");
+        $("#ddlFilterComposers").val("");
+        $("#ddlFilterConverters").val("");
+        $("#cbxFilterVanillaBank").prop('checked', true);
+        $("#cbxFilterCustomBank").prop('checked', true);
+        $("#cbxFilterCustomSamples").prop('checked', true);
+        applyFilters();
+      }
+      function applyFilters(){
+        var filterGameName = $("#txtFilterGameName").val();
+        var filterSongName = $("#txtFilterSongName").val();
+        var filterSequenceType = $("#ddlFilterSequenceType").val();
+        var filterMusicGroups = $("#ddlFilterMusicGroups").val();
+        var filterComposers = $("#ddlFilterComposers").val(); // TODO: Convert these ones into select multiples... with chosen
+        var filterConverters = $("#ddlFilterConverters").val();
+        var filterVanillaBank = $("#cbxFilterVanillaBank").is(":checked");
+        var filterCustomBank = $("#cbxFilterCustomBank").is(":checked");
+        var filterCustomSamples = $("#cbxFilterCustomSamples").is(":checked");
+
+        filteredDatabase = database.filter(s => {
+          return (filterGameName ? s.game.toLowerCase().includes(filterGameName.toLowerCase()) : true) &&
+                 (filterSongName ? s.song.toLowerCase().includes(filterSongName.toLowerCase()) : true) &&
+                 (filterSequenceType ? s.type == filterSequenceType : true) &&
+                 (filterMusicGroups ? (s.categories ?? []).includes(filterMusicGroups) : true) &&
+                 (filterComposers ? (s.composers ?? []).includes(filterComposers) : true) &&
+                 (filterConverters ? (s.converters ?? []).includes(filterConverters) : true) &&
+
+                 ((filterCustomSamples ? s.usesCustomSamples : false) ||
+                 (filterCustomBank ? (s.usesCustomBank && !s.usesCustomSamples) : false) ||
+                 (filterVanillaBank ? (!s.usesCustomSamples && !s.usesCustomBank) : false));
+        });
+
+        loadGamesList();
+        loadSongsList([]);
+      }
 
       function loadGamesList(){
         $("#panelGames").empty();
-        var searchFilter = $("#txtSearchGames").val();
 
         // TODO: WE NEED TO ORDER THIS STUFF
         // Basically, we need the series together with the games that have no series
@@ -256,9 +295,10 @@
         // I think we need to add a method that returns a game.
 
         // Get the games list, with no dupes
-        var games = [...new Set(database.map(s => s.game))].sort();
+        var games = [...new Set(filteredDatabase.map(s => s.game))].sort();
 
         // Now filter the game list
+        var searchFilter = $("#txtSearchGames").val();
         games = games.filter(g => g.toLowerCase().includes(searchFilter.toLowerCase()));
 
         // Get the series, and the games that have none
@@ -289,7 +329,7 @@
           var isSeries = series.includes(game);
           if(isSeries) {
             var isSelected = selectedSeries.some(s => s == i);
-            var songsOfSeries = database.filter(s => {
+            var songsOfSeries = filteredDatabase.filter(s => {
               // First, do not bring any song that doesn't match with the main game filter
               if(!s.game.toLowerCase().includes(searchFilter.toLowerCase())) return false;
 
@@ -369,7 +409,7 @@
       }
       function createGameNavItem(panelId, game, i){
         var isPartOfSeries = ("" + i).includes("_");
-        var songsOfGame = database.filter(s => s.game == game);
+        var songsOfGame = filteredDatabase.filter(s => s.game == game);
         var songsChecked = songsOfGame.filter(s => selections.includes(s.index));
         var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfGame.length ? "checked" : "indeterminate");
         
@@ -392,7 +432,7 @@
         });
         $(`#cbxGame${i}`).on("click", function(e){
           e.stopPropagation(); // We don't want to hit the button underneath...
-          var songIndices = database.filter((s) => s.game == game).map((s) => s.index);
+          var songIndices = filteredDatabase.filter((s) => s.game == game).map((s) => s.index);
           updateSelections(songIndices, this.checked);
         });
       }
@@ -404,7 +444,7 @@
         // Cleanup the panel and select the games selected for this song list
         $("#panelSongs, #panelFanfares").empty();
         $(".btn-game").removeClass("active");
-        $("#lbTitleSongs").text(games.join(", "));
+        $("#lbTitleSongs").text(songs.length == 0 ? "Songs view" : games.join(", "));
         games.forEach(game => $(`.btn-game[data-game="${game}"]`).addClass("active"));
         
         // Show the song list to the user
@@ -613,6 +653,8 @@
         $("#modalSongPreview").on("hide.bs.modal", stopPreview);
         $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", updateSongViewOptions);
         $("#btnDownloadSongPack").on("click", downloadSongPack);
+        $("#btnApplyFilters").on("click", applyFilters);
+        $("#btnResetFilters").on("click", resetFilters);
 
         $("#cbxSelectAll").on("change", function(){
           var checkedState = this.checked;
@@ -714,6 +756,22 @@
         display: none;
       }
 
+      .sv-collapse{
+        background-color: rgba(0,0,0,.12);
+        border-bottom: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color);
+      }
+      .sv-collapse.collapsed{
+        background-color: inherit;
+        border-bottom: inherit;
+      }
+      .sv-collapse:hover{
+        color: var(--bs-primary-text-emphasis);
+        background-color: rgba(0,0,0,.2);
+      }
+      /*#panelSongs, #panelFanfares{
+        background-color: rgba(0,0,0,.12);
+      }*/
+
       .responsive-iframe {
         position: relative;
         overflow: hidden;
@@ -777,7 +835,7 @@
       <div class="mx-auto">
         <button type="button" id="btnSearch" class="btn btn-search px-2" data-bs-toggle="modal" data-bs-target="#modalFilter">
           <i class="fa-solid fa-search"></i>
-          <span class="me-3">Search the repository</span>
+          <span class="me-3">Search this repository</span>
           <i class="fa-solid fa-list"></i>
         </button>
       </div>
@@ -858,12 +916,18 @@
             </div>
             <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
               <div id="panelSongView">
-                <h5 class="mb-0 ms-3 mt-3">BGMs</h5>
-                <div id="panelSongs" class="row px-3 pt-3 g-2"></div>
+                <div class="sv-collapse row mb-0 ps-3 py-3" data-bs-toggle="collapse" data-bs-target="#panelSongs">
+                  <h5 class="col mb-0">BGMs</h5>
+                  <i class="col-auto fa-solid fa-caret-down me-3 mt-1"></i>
+                </div>
+                <div id="panelSongs" class="row px-3 pt-2 pb-3 g-2 mt-0 collapse show"></div>
                 
-                <hr>
-                <h5 class="mb-0 ms-3">Fanfares</h5>
-                <div id="panelFanfares" class="row px-3 pt-3 g-2"></div>
+                <hr class="my-0">
+                <div class="sv-collapse row mb-0 ps-3 py-3" data-bs-toggle="collapse" data-bs-target="#panelFanfares">
+                  <h5 class="col mb-0">Fanfares</h5>
+                  <i class="col-auto fa-solid fa-caret-down me-3 mt-1"></i>
+                </div>
+                <div id="panelFanfares" class="row px-3 pt-2 pb-3 g-2 mt-0 collapse show"></div>
               </div>
             </div>
           </div>
@@ -878,17 +942,17 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5">Filter</h1>
+            <h1 class="modal-title fs-5">Search this repository</h1>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body row g-3">
             <div class="form-group col-md-6 mb-3">
-              <label>Song name:</label>
-              <input id="txtFilterSongName" type="text" class="form-control" />
-            </div>
-            <div class="form-group col-md-6 mb-3">
               <label>Game name:</label>
               <input id="txtFilterGameName" type="text" class="form-control"/>
+            </div>
+            <div class="form-group col-md-6 mb-3">
+              <label>Song name:</label>
+              <input id="txtFilterSongName" type="text" class="form-control" />
             </div>
 
             <div class="form-group col-md-6 mb-3">
@@ -937,9 +1001,9 @@
 
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-link">Reset</button>
+            <button type="button" class="btn btn-outline-primary me-auto" id="btnResetFilters">Reset filters</button>
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary">Apply filters</button>
+            <button type="button" class="btn btn-primary" id="btnApplyFilters">Apply filters</button>
           </div>
         </div>
       </div>
