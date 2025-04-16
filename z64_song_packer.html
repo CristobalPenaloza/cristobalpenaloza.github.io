@@ -509,8 +509,8 @@
           });
         });
 
-        // Check if any of the lists are emptt
-        // TODO: TODOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+        // Check if any of the lists are empty
+        // TODO: TODOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
       }
 
       function toArray(v){
@@ -519,6 +519,9 @@
         else return [];
       }
 
+
+
+      // ------- PREVIEWS ---------
 
       function previewSong(song){
         var preview = song.preview;
@@ -545,6 +548,7 @@
         } else{
           // If it's a Discord file, use a proxy to renew the access token
           // Shouts out to Serinamoe on Reddit for providing this proxy! Thank you so much!
+          // TODO: THIS IS NO LONGER WORKING, I'LL NEED TO CREATE A NEW PROXY!
           if(preview.startsWith("https://cdn.discordapp.com")){
             preview = preview.replace("https://cdn.discordapp.com", "https://cdn.discordapp.xyz");
           }
@@ -568,6 +572,9 @@
         $("#apSongPreview")[0].pause();
       }
 
+
+
+      // ---------- SONG VIEW BUTTONS -------------
 
       function updateSongViewOptions(){
         $("#panelSongView").toggleClass("hide-metadata", !$("#cbxViewMetadata").is(":checked"));
@@ -597,6 +604,10 @@
       }
 
 
+
+
+      // ------------- DOWNLOADS --------------
+
       async function downloadSingleFile(song){
         $("#loadingOverlay").removeClass("d-none");
 
@@ -622,24 +633,66 @@
         // Fetch the full binaries.zip file
         var binariesLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`;
         var binariesResponse = await fetch(binariesLink);
-
         if(binariesResponse.ok){
           var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
-          console.log(binaries);
+          // console.log(binaries);
+
+          var maintainFolderStructure = $("#cbxMaintainFolderStructure").is(":checked");
+          var useShortGameNames = $("#cbxUseShortGameNames").is(":checked");
+          var volumePreAmplifying = parseInt($("#rgVolumePreAmplifying").val());
 
           // Loop every selection
           for(var songIndex of selections){
             var song = database[songIndex];
 
             // Grab the song from our binaries file
-            var file = binaries.file(`${selectedRepo.binaries}/${song.file}`.replace("//", "/"));
+            var songFile = binaries.file(`${selectedRepo.binaries}/${song.file}`.replace("//", "/"));
 
-            // Add the file to the final zip pack
+            // Abbreviate the name (only if consist of multiple words!)
+            // We just pick the first letter of each word
+            // If is a number, leave it as is
+            var splittedGameName = song.game.split(/\-| /);
+            var shortGameName = splittedGameName.length == 1 ? song.game : splittedGameName.map(x => /^\d+$/.test(x) ? x : x.slice(0, 1)).join('');
+            
+            // Get the final name for the song using the options selected
             var extension = song.file.split('.').pop();
-            var fileName = `${song.game} - ${song.song}.${extension}`;
-            zip.file(fileName, await file.async("blob"));
+            var finalSongName = `${useShortGameNames ? shortGameName : song.game} - ${song.song}`
+            var fileName = `${finalSongName}.${extension}`;
+            if(maintainFolderStructure) fileName = song.file; // <- If we want to maintain the folder structure, we just return the path as it is on github
+            
+            // Iterate over every internal file...
+            var z64File = await new JSZip().loadAsync(songFile.async("blob"));
+            var internalFiles = z64File.file(/(.*?)/);
+            for(var i=0; i<internalFiles.length; i++){
+              var file = internalFiles[i];
+              
+              // Change the internal name on ootrs files (not needed for mmrs)
+              if(useShortGameNames && file.name.endsWith(".meta")){
+                var metaFile = await file.async("text");
+                var lines = metaFile.split('\n');
+                lines[0] = finalSongName; // The first line is the song name!
+                z64File.file(file.name, lines.join('\n'));
+              }
 
-            // Download the song from the github repository (OLD fetch version | Changed because slow)
+              // Modify the volume inside the seq file
+              if(volumePreAmplifying != 0 && (file.name.endsWith(".seq") || file.name.endsWith(".zseq"))){
+                // I think this requires compatibility from the browser... check if it works in others than chrome
+                var seq = await file.async("uint8array");
+                var mainVolumeCommandIndex = seq.indexOf(0xDB);
+                var mainVolume = seq[mainVolumeCommandIndex + 1];
+                var finalVolume = Math.min(Math.max(mainVolume + volumePreAmplifying, 0x0), 0xFF); // <- Clamp to 8bits
+                console.log("Main volume changed: " + mainVolume + " -> " + finalVolume);
+                seq[mainVolumeCommandIndex + 1] = finalVolume;
+                z64File.file(file.name, seq);
+              }
+            }
+            
+            // Add the file
+            //zip.file(fileName, await songFile.async("blob"));
+            console.log("Saving zip file: ", fileName);
+            zip.file(fileName, await z64File.generateAsync({ type: "blob" }));
+
+            // Download the song from the github repository (OLD fetch version | changed because slow)
             /*var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`;
             var fileResponse = await fetch(fileLink);
             console.log(fileLink);
@@ -654,11 +707,14 @@
         }
 
         // We finally, download the generated zip
-        var blob = await zip.generateAsync({ type:"blob" });
+        var blob = await zip.generateAsync({ type: "blob" });
         saveAs(blob, `${selectedRepo.name} - Song Pack - ${Date.now()}.zip`);
         $("#loadingOverlay").addClass("d-none");
       }
 
+
+
+      // ------------ DOCUMENT READY ---------------
 
       $(function(){
         init();
@@ -698,6 +754,9 @@
       });
     </script>
 
+
+
+    <!-- ------- START OF HTML -------- -->
     
     <div id="loadingOverlay" class="loading-overlay d-none">
       <i class="fa-solid fa-spinner fa-spin-pulse fa-3x"></i>
@@ -802,14 +861,15 @@
                   <li>
                     <div class="px-3 row">
                       <div class="col">
-                        <input type="range" class="form-range" min="-5" max="5" step="0.1" id="rgVolumePreAmplifying" list="dtVolumePreAmplifying">
+                        <input type="range" class="form-range" min="-100" max="100" step="1" id="rgVolumePreAmplifying" list="dtVolumePreAmplifying"
+                          oninput="$('#lbVolumePreAmplifying').text((parseInt(this.value) > 0 ? '+' : '') + this.value)">
                         <datalist id="dtVolumePreAmplifying">
-                          <option value="-5" label="-5"></option>
+                          <option value="-100" label="-100"></option>
                           <option value="0" label="0"></option>
-                          <option value="5" label="5"></option>
+                          <option value="100" label="+100"></option>
                         </datalist>
                       </div>
-                      <span class="col-auto ps-0" id="lbVolumePreAmplifying">0 dB</span>
+                      <span class="col-auto ps-0" style="width: 50px;" id="lbVolumePreAmplifying">0</span>
                     </div>
                   </li>
 
