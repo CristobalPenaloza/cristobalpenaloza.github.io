@@ -458,7 +458,10 @@
         $(".btn-game").removeClass("active");
         $("#lbTitleSongs").text(songs.length == 0 ? "Songs view" : games.join(", "));
         games.forEach(game => $(`.btn-game[data-game="${game}"]`).addClass("active"));
-        
+
+        if(songs.filter((s) => s.type.toLowerCase() == "fanfare").length == 0) $("#panelFanfares").append("<div class='opacity-50'>There are no fanfares for the selected game.</div>");
+        if(songs.filter((s) => s.type.toLowerCase() != "fanfare").length == 0) $("#panelSongs").append("<div class='opacity-50'>There are no background music tracks for the selected game.</div>");
+
         // Show the song list to the user
         songs.sort((a, b) => a.song.localeCompare(b.song)).forEach((s, i) => {
 
@@ -472,6 +475,36 @@
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
 
           $(isFanfare ? "#panelFanfares" : "#panelSongs").append(
+            `<div class="col-12">
+              <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
+                <div class="row align-items-center g-2">
+                  <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
+                  <b class="col">${s.song}</b>
+                  <div class='metadata col'>
+                    <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
+                    <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
+                  </div>
+                  <div class="categories col-5">
+                    <div class="row g-0 align-items-center">
+                      <i class="col-auto fa-solid fa-tag fa-fw col-auto pt-1"></i>
+                      <div class='col mt-0'>${categories.join(" ")}</div>
+                    </div>
+                  </div>
+                  <span class="format col text-end">
+                    <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
+                    ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla"}</span>
+                  </span>
+
+                  <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
+                
+                </div>
+                
+              </div>
+            </div>`
+          );
+
+          // TODO: AÑADIR VARIANTE EN LINEAS
+          /*$(isFanfare ? "#panelFanfares" : "#panelSongs").append(
             `<div class="col-3">
               <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                 <div class="row align-items-center g-2">
@@ -493,7 +526,8 @@
                 </span>
               </div>
             </div>`
-          );
+          );*/
+
           $(`#btnSong${i}`).on("click", function(){
             if(isSelected) selections = selections.filter(sel => sel != s.index);
             else selections.push(s.index);
@@ -509,6 +543,9 @@
           });
         });
 
+
+        updatePanelsSelectedCount();
+        updateSongViewOptions();
         // Check if any of the lists are empty
         // TODO: TODOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
       }
@@ -601,6 +638,17 @@
         var currentIndeterminateSelections = $("input[id^='cbxGame']:indeterminate").length;
         var checkState = (currentIndeterminateSelections + currentCheckedSelections) == 0 ? "" : (currentCheckedSelections >= allSelections ? "checked" : "indeterminate");
         $("#cbxSelectAll").prop("checked", false).prop("indeterminate", false).prop(checkState, true);
+
+        // Update the BGM and Fanfare panel count
+        updatePanelsSelectedCount();
+      }
+      function updatePanelsSelectedCount(){
+        var bgmCount = $("#panelSongView .btn-song").length;
+        var checkedBGMs = $("#panelSongView .btn-song.active").length;
+        $("#lbSelectedSongsCount").text(`${checkedBGMs}/${bgmCount} selected`);
+        var fanfareCount = $("#panelFanfares .btn-song").length;
+        var checkedFanfares = $("#panelFanfares .btn-song.active").length;
+        $("#lbSelectedFanfaresCount").text(`${checkedFanfares}/${fanfareCount} selected`);
       }
 
 
@@ -894,12 +942,12 @@
 
             <div id="panelSongViewOptions" class="border-bottom py-2 px-3">
               <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="checkbox" id="cbxViewMetadata" checked>
+                <input class="form-check-input" type="checkbox" id="cbxViewMetadata">
                 <label class="form-check-label" for="cbxViewMetadata">Show composers/converters</label>
               </div>
 
               <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="checkbox" id="cbxViewCategories" checked>
+                <input class="form-check-input" type="checkbox" id="cbxViewCategories">
                 <label class="form-check-label" for="cbxViewCategories">Show categories</label>
               </div>
 
@@ -911,7 +959,8 @@
             <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
               <div id="panelSongView">
                 <div class="sv-collapse row mb-0 ps-3 py-3" data-bs-toggle="collapse" data-bs-target="#panelSongs">
-                  <h5 class="col mb-0">BGMs</h5>
+                  <h5 class="col mb-0">Background Music (BGMs)</h5>
+                  <span class="col-auto" id="lbSelectedSongsCount">0/0 selected</span>
                   <i class="col-auto fa-solid fa-caret-down me-3 mt-1"></i>
                 </div>
                 <div id="panelSongs" class="row px-3 pt-2 pb-3 g-2 mt-0 collapse show"></div>
@@ -919,6 +968,7 @@
                 <hr class="my-0">
                 <div class="sv-collapse row mb-0 ps-3 py-3" data-bs-toggle="collapse" data-bs-target="#panelFanfares">
                   <h5 class="col mb-0">Fanfares</h5>
+                  <span class="col-auto" id="lbSelectedFanfaresCount">0/0 selected</span>
                   <i class="col-auto fa-solid fa-caret-down me-3 mt-1"></i>
                 </div>
                 <div id="panelFanfares" class="row px-3 pt-2 pb-3 g-2 mt-0 collapse show"></div>
