@@ -112,15 +112,18 @@
 
 
       async function userLogin(){
-        try {
-          //loadForm();
-          //return;
+        authToken = $("#txtGithubAuthToken").val();
+        await loadRepoSelection();
+      }
 
+      async function loadRepoSelection(){
+        try {
           // We put an overlay to prevent more user action
           $("#loadingOverlay").removeClass("d-none");
 
+          // TODO: SEPARATE THIS METHOD IN TWO PARTS, SO WE CAN GO BACK ONE STEP!!!
           // Get the token the user put
-          authToken = $("#txtGithubAuthToken").val();
+          
           const octokit = new Octokit({ auth: authToken });
 
           // Get the username of this token
@@ -129,6 +132,10 @@
           fullName = user.data.name;
           email = user.data.email;
           avatarUrl = user.data.avatar_url;
+
+          // Do a cleanup
+          repos = [];
+          $("#containerRepo").empty();
 
           // Load the user info
           $("#niAvatar").removeClass("d-none");
@@ -158,14 +165,17 @@
 
             // Try to get the z64musicpacker.properties file from the original repo
             // We don't use raw.githubusercontent.com, since it has a cache delay of 300 seconds (5 mins) that can cause issues
-            var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-              owner: originalRepoOwner,
-              repo: repo.name,
-              path: "z64musicpacker.properties"
+            try{
+              var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                owner: originalRepoOwner,
+                repo: repo.name,
+                path: "z64musicpacker.properties"
+              });
 
-            }).catch((error) => {
+            } catch(error){
               //console.log(`${repo.name} is not a z64 repo`);
-            });
+              return;
+            }
 
             // TODO: Add version, and compatible files to z64musicpacker.properties
             
@@ -220,6 +230,7 @@
             $("#loadingOverlay").addClass("d-none");
             $("#panelAuthorization").addClass("d-none");
             $("#panelRepoSelection").removeClass("d-none");
+            $("#panelSubmissionDetails").addClass("d-none");
           }
 
           // If we catch an error, show it to the user
@@ -243,6 +254,7 @@
           // We synced and got the db! Now we load the form
           $("#panelRepoSelection").addClass("d-none");
           $("#panelSubmissionDetails").removeClass("d-none");
+          clearFullSubmissionForm();
         }
 
         $("#imgRepoAvatar").attr("src", repo.originalRepoAvatarUrl);
@@ -296,6 +308,7 @@
           queryTokenizer: Bloodhound.tokenizers.whitespace,
           local: [...new Set(database.map((d) => d.game))],
         });
+        $("#txtGameName").typeahead("destroy");
         $("#txtGameName").typeahead({
           hint: true,
           highlight: true, /* Enable substring highlighting */
@@ -311,6 +324,7 @@
           queryTokenizer: Bloodhound.tokenizers.whitespace,
           local: [...new Set(database.map((d) => d.game + " | " + d.song))],
         });
+        $("#txtSongSelect").typeahead("destroy");
         $("#txtSongSelect").typeahead({
           hint: true,
           highlight: true,
@@ -342,6 +356,7 @@
         $("#txtSongName").val(songToEdit.song);
         $("#txtComposers").val(toArray(songToEdit.composers).join(", "));
         $("#txtConverters").val(toArray(songToEdit.converters).join(", "));
+        $("#cbxIsDMCACritical").prop('checked', songToEdit.isDMCACritical ? true : false);
         $("#txtPreviewLink").val(songToEdit.preview);
 
         // Also, make fileUpload optional, when we only want to modify metadata and not the file itself
@@ -462,12 +477,19 @@
       });
 
 
+      function clearFullSubmissionForm(){
+        $("input[name=rbSubmissionType]").prop('checked', false);
+        $("#mainForm").addClass("d-none");
+        $("#panelSongSelect").addClass("d-none");
+        clearForm();
+      }
       function clearForm(){
         clearFileInput();
         $("#txtGameName").val("");
         $("#txtSongName").val("");
         $("#txtComposers").val("");
         $("#txtConverters").val("");
+        $("#cbxIsDMCACritical").prop('checked', false);
         $("#txtPreviewLink").val("");
         $("#txtNotes").val("");
         $("#mainForm").removeClass("was-validated");
@@ -516,12 +538,17 @@
         if(!editMode){
           entry = {};
           entry.uuid = crypto.randomUUID(); // <-- uuid v4
+          entry.creationDate = new Date().toISOString(); // <-- We use unix utc for consistency... everyone has different timezones!
+
+        } else{
+          entry.lastUpdateDate = new Date().toISOString();
         }
 
         entry.game = $("#txtGameName").val();
         entry.song = $("#txtSongName").val();
         entry.composers = toArray($("#txtComposers").val());
         entry.converters = toArray($("#txtConverters").val());
+        entry.isDMCACritical = $("#cbxIsDMCACritical").is(":checked");
         entry.preview = $("#txtPreviewLink").val();
 
         // If we have a file selected... update the path
@@ -581,7 +608,7 @@
               });
               if(deleteFileResponse === undefined){
                 $("#loadingOverlay").addClass("d-none");
-              return;
+                return;
               }
               fileSha = null; // <-- Reset the sha, since we will be creating a new file
             }
@@ -624,6 +651,7 @@
 
 
         // Do a pull request with the newly added files
+        // We only do this on forks to allow compatibility for repo owners to also use the submission form
         if(selectedRepo.repoIsFork){
 
           // We create a comment for this new entry
@@ -683,8 +711,9 @@
         }
         
         toast("Process completed!");
-        clearForm();
+        
         await syncRepoAndGetLatestDatabase();
+        clearFullSubmissionForm();
         $("#loadingOverlay").addClass("d-none");
       }
 
@@ -706,9 +735,10 @@
       $(function(){
         // Submit mappings
         $("#btnLogin").on("click", userLogin);
+        $("#btnSubmissionDetailsBack").on("click", loadRepoSelection);
         $("#btnSongSelect").on("click", selectSongToModify);
         $("#btnSubmit").on("click", submitForm);
-
+        
         // We don't want to trigger an actual submit, since we don't have any backend
         $("#mainForm").on("submit", function(e){
           e.preventDefault();
@@ -817,7 +847,7 @@
         <div class="card bg-body-tertiary col p-0 g-3 d-none" style="max-width: 500px;" id="panelSubmissionDetails">
           
           <div class="row g-0 py-2 align-items-center border-bottom bg-primary-subtle rounded-top">
-            <i class="col-auto fa-solid fa-lg fa-arrow-left me-auto ms-3"></i>
+            <i class="col-auto fa-solid fa-lg fa-arrow-left me-auto ms-3" style="cursor: pointer" id="btnSubmissionDetailsBack"></i>
             <img class="col-auto rounded-circle bg-white" id="imgRepoAvatar" width="30" height="30" src="" />
             <h5 class="col-auto ps-2 pe-3 mb-0 me-auto" id="lbRepoName"></h5>
           </div>
@@ -932,6 +962,18 @@
               <div class="invalid-feedback">
                 Please insert at least one converter. Your name should be here.
               </div>
+            </div>
+
+            <hr>
+            
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="cbxIsDMCACritical">
+              <label class="form-check-label" for="cbxIsDMCACritical">
+                Is DMCA critical?
+              </label>
+              <p class="hint">
+                If this track could cause DMCA related issues, then it's EXTREMELY IMPORTART to check this box so it can be filtered accordingly.
+              </p>
             </div>
   
             <hr>

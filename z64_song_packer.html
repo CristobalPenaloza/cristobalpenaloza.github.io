@@ -24,6 +24,15 @@
     <!-- TODO: Add custom repo stylesheet-->
   </head>
   <body>
+    <style>
+      .hint{
+        padding: 0;
+        margin: 0;
+        margin-bottom: .25rem;
+        font-size: 80%;
+        opacity: .5;
+      }
+    </style>
 
     <script type="importmap">
     {
@@ -39,6 +48,15 @@
       import * as bootstrap from "bootstrap";
       import { MMCategories } from "./js/mmcategories.js";
 
+      var defaultSettings = {
+        selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
+        // TODO: ADD MORE OPTIONS!!!
+        // TODO: ADD THE REAL REPOS!!!
+        userRepos: [
+          { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
+          { id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
+        ],
+      };
 
       var repos = []; // <-- Add here more repos, added by the user
       var selectedRepo = null;
@@ -48,6 +66,7 @@
       var selectedSeries = [];
       var currentSongList = [];
       var filteredDatabase = [];
+      var isListView = true;
 
       function toast(message){
         var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
@@ -84,22 +103,9 @@
         try{
           return JSON.parse(atob(localStorage.settings));
 
-        // If we cannot load the settings, then we crate a new one
+        // If we cannot load the settings, then we crate a new one with default values
         } catch(e){
-          // TODO: Add here the default loaded repos
-          return {
-            selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
-            userRepos: [
-              {
-                id: "CristobalPenaloza/Z64PackerTestRepo/main",
-                selections: [],
-              },
-              {
-                id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0",
-                selections: [],
-              }
-            ],
-          };
+          return defaultSettings;
         }
       }
       function deleteSettings(){
@@ -112,9 +118,11 @@
         // const octokit = new Octokit();
         $("#loadingOverlay").removeClass("d-none");
 
-        // TODO: GET THE EXTRA REPOS FROM THE USER'S COOKIES
+        // For now, I think it would be better to just use predefined repos
+        // That ways is less cumbersome, and clearer for the users
         var settings = getSettings();
-        var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
+        //var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
+        var userRepos = defaultSettings.userRepos.map(r => r.id);
         repos = [];
 
         // Load the properties from each repo
@@ -153,7 +161,7 @@
         // TODO: ADD THE REPOS TO THE MAIN SELECT
         repos.forEach((repo, i) => {
           $("#panelRepoSelection").append(
-            `<button type="button" class="btn btn-outline-light w-100 mb-3" id="btnSelectRepo${i}">
+            `<button type="button" class="btn border w-100 mb-3" id="btnSelectRepo${i}">
               <div class="row">
                 <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
                 <div class="col text-start">
@@ -474,59 +482,60 @@
           var isSelected = selections.includes(s.index);
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
 
-          $(isFanfare ? "#panelFanfares" : "#panelSongs").append(
-            `<div class="col-12">
-              <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
-                <div class="row align-items-center g-2">
-                  <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
-                  <b class="col">${s.song}</b>
-                  <div class='metadata col'>
+          // LIST VIEW
+          if(isListView){
+            $(isFanfare ? "#panelFanfares" : "#panelSongs").append(
+              `<div class="col-12">
+                <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
+                  <div class="row align-items-center g-2">
+                    <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
+                    <b class="col">${s.song}</b>
+                    <div class='metadata col'>
+                      <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
+                      <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
+                    </div>
+                    <div class="categories col-5">
+                      <div class="row g-0 align-items-center">
+                        <i class="col-auto fa-solid fa-tag fa-fw col-auto pt-1"></i>
+                        <div class='col mt-0'>${categories.join(" ")}</div>
+                      </div>
+                    </div>
+                    <span class="format col text-end">
+                      <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
+                      ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla"}</span>
+                    </span>
+                    <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
+                  </div>
+                </div>
+              </div>`
+            );
+
+          // GRID VIEW
+          } else{
+            $(isFanfare ? "#panelFanfares" : "#panelSongs").append(
+              `<div class="col-3">
+                <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
+                  <div class="row align-items-center g-2">
+                    <b class="col">${s.song}</b>
+                    <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
+                    <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
+                  </div>
+                  <div class='metadata border-top mt-2 pt-2'>
                     <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
                     <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
                   </div>
-                  <div class="categories col-5">
-                    <div class="row g-0 align-items-center">
-                      <i class="col-auto fa-solid fa-tag fa-fw col-auto pt-1"></i>
-                      <div class='col mt-0'>${categories.join(" ")}</div>
-                    </div>
+                  <div class='categories border-top mt-2 pt-2 row g-1'>
+                    <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
+                    <div class='col mt-0'>${categories.join(" ")}</div>
                   </div>
-                  <span class="format col text-end">
+                  <span class="format border-top mt-2 pt-2">
                     <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
-                    ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla"}</span>
+                    ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla bank"}</span>
                   </span>
-
-                  <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
-                
                 </div>
-                
-              </div>
-            </div>`
-          );
-
-          // TODO: AÑADIR VARIANTE EN LINEAS
-          /*$(isFanfare ? "#panelFanfares" : "#panelSongs").append(
-            `<div class="col-3">
-              <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
-                <div class="row align-items-center g-2">
-                  <b class="col">${s.song}</b>
-                  <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
-                  <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
-                </div>
-                <div class='metadata border-top mt-2 pt-2'>
-                  <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
-                  <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
-                </div>
-                <div class='categories border-top mt-2 pt-2 row g-1'>
-                  <i class="fa-solid fa-tag fa-fw col-auto pt-1"></i>
-                  <div class='col mt-0'>${categories.join(" ")}</div>
-                </div>
-                <span class="format border-top mt-2 pt-2">
-                  <i class="fa-solid fa-file-audio fa-fw"></i> <span class='opacity-50'>${isOOTRS ? "OOTRS" : "MMRS"}
-                  ${s.usesCustomBank ? (" custom bank" + (s.usesCustomSamples ? " and samples" : "")) : " vanilla bank"}</span>
-                </span>
-              </div>
-            </div>`
-          );*/
+              </div>`
+            );
+          }
 
           $(`#btnSong${i}`).on("click", function(){
             if(isSelected) selections = selections.filter(sel => sel != s.index);
@@ -586,8 +595,10 @@
           // If it's a Discord file, use a proxy to renew the access token
           // Shouts out to Serinamoe on Reddit for providing this proxy! Thank you so much!
           // TODO: THIS IS NO LONGER WORKING, I'LL NEED TO CREATE A NEW PROXY!
+          // I think the name changed on march 2025... https://dnshistory.org/historical-dns-records/cname/cdn.discordapp.xyz
+          // The IP seems to be 218.153.236.48, but I think is no longer working...
           if(preview.startsWith("https://cdn.discordapp.com")){
-            preview = preview.replace("https://cdn.discordapp.com", "https://cdn.discordapp.xyz");
+            preview = "https://z64-discord-cdn-proxy.wl.r.appspot.com?" + preview;
           }
 
           // Load the preview
@@ -660,7 +671,9 @@
         $("#loadingOverlay").removeClass("d-none");
 
         // Fetch the single file. This is slow, but MUCH faster that bringing the full binaries zip
-        var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`;
+        // Although, now it doesnt work... >:(
+        var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`.replaceAll("//", "/");
+        console.log("Downloading... [" + fileLink + "]")
         var fileResponse = await fetch(fileLink);
         if(fileResponse.ok){
 
@@ -668,6 +681,9 @@
           var extension = song.file.split('.').pop();
           var blob = await fileResponse.blob();
           saveAs(blob, `${song.game} - ${song.song}.${extension}`);
+
+        } else{
+          console.log(fileResponse);
         }
         $("#loadingOverlay").addClass("d-none");
       }
@@ -679,7 +695,7 @@
         var zip = new JSZip();
 
         // Fetch the full binaries.zip file
-        var binariesLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`;
+        var binariesLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`.replaceAll("//", "/");
         var binariesResponse = await fetch(binariesLink);
         if(binariesResponse.ok){
           var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
@@ -784,6 +800,7 @@
           updateSelections();
         });
 
+        
         $("#btnSaveSelections").on("click", function(){
           saveSettings();
           toast("Selections saved to the browser's local storage!");
@@ -792,12 +809,15 @@
           var theme = $("html").attr("data-bs-theme");
           $("html").attr("data-bs-theme", theme == "dark" ? "light" : "dark");
         });
-        $("#btnConfiguration").on("click", function(){
-        });
 
 
         $("#txtSearchGames").on("input", function(){
           loadGamesList();
+        });
+
+        $("#btnChangeSongView").on("click", function(){
+          isListView = !isListView;
+          loadSongsList(currentSongList);
         });
       });
     </script>
@@ -855,14 +875,60 @@
         </li>
       </ul>
 
-      <div class="mx-auto">
+      <div class="ms-auto">
         <button type="button" id="btnSearch" class="btn btn-search px-3" data-bs-toggle="modal" data-bs-target="#modalFilter">
           <i class="fa-solid fa-search me-1"></i>
           <span class="me-1">Search this repository</span>
         </button>
       </div>
+      <div class="ms-2 me-auto">
+        <div class="nav-item dropdown col-auto ms-auto">
+          <button id="btnDownload" type="button" class="btn btn-search px-3" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            <i class="fa-solid fa-download me-1"></i>
+            <span class="me-1">Download song pack</span>
+          </button>
+          <ul class="dropdown-menu pb-0">
+            <li><h6 class="dropdown-header">Export options:</h6></li>
+            <li>
+              <div class="form-check form-check-inline ms-3">
+                <input class="form-check-input" type="checkbox" id="cbxMaintainFolderStructure">
+                <label class="form-check-label" for="cbxMaintainFolderStructure">Maintain folder structure</label>
+              </div>
+            </li>
+            <li>
+              <div class="form-check form-check-inline ms-3">
+                <input class="form-check-input" type="checkbox" id="cbxUseShortGameNames">
+                <label class="form-check-label" for="cbxUseShortGameNames">Use short game names</label>
+              </div>
+            </li>
+            <hr class="my-2">
+            <li><h6 class="dropdown-header">Volume pre-amplifying:</h6></li>
+            <li>
+              <div class="px-3 row">
+                <div class="col">
+                  <input type="range" class="form-range" min="-100" max="100" step="1" id="rgVolumePreAmplifying" list="dtVolumePreAmplifying"
+                    oninput="$('#lbVolumePreAmplifying').text((parseInt(this.value) > 0 ? '+' : '') + this.value)">
+                  <datalist id="dtVolumePreAmplifying">
+                    <option value="-100" label="-100"></option>
+                    <option value="0" label="0"></option>
+                    <option value="100" label="+100"></option>
+                  </datalist>
+                </div>
+                <span class="col-auto ps-0" style="width: 50px;" id="lbVolumePreAmplifying">0</span>
+              </div>
+            </li>
+
+            <hr class="mt-2 mb-0">
+            <li>
+              <a class="dropdown-item active rounded-bottom py-2" href="#" id="btnDownloadSongPack">
+                <i class="fa-solid fa-download"></i> Download song pack <span class="opacity-50">| ZIP</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
       
-      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn btn-outline-light border-0 px-2">
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn border-0 px-2">
         <div class="row g-2">
           <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="" />
           <b class="col mb-0"><span id="lbRepoName">Z64 Test Repo</span> <i class="fa-solid fa-caret-down"></i></b>
@@ -872,7 +938,29 @@
 
       <i class="fa-solid fa-lg fa-save nav-link ms-2 mt-1" style="cursor: pointer;" title="Save selections" id="btnSaveSelections"></i>
       <i class="fa-solid fa-lg fa-moon nav-link ms-3 mt-1" style="cursor: pointer;" title="Theme" id="btnTheme"></i>
-      <i class="fa-solid fa-lg fa-cog nav-link mx-3 mt-1" style="cursor: pointer;" title="Configuration" id="btnConfiguration"></i>
+      <div class="nav-item dropdown col-auto">
+        <button class="btn btn-link nav-link mx-3" style="margin-top: 1px;" title="Configuration" id="btnConfiguration" data-bs-toggle="dropdown"
+          data-bs-auto-close="outside" aria-expanded="false">
+          <i class="fa-solid fa-lg fa-cog"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end pb-0" style="min-width: 400px">
+          <li><h6 class="dropdown-header">Configuration:</h6></li>
+          <li>
+            <div class="form-check form-check-inline ms-3">
+              <input class="form-check-input" type="checkbox" id="cbxAutosaveSelections">
+              <label class="form-check-label" for="cbxAutosaveSelections">Autosave selections</label>
+              <p class="hint">This saves your selections on the browser's local storage everytime you make a change. This can be taxing to your browser! Disable it if you are experiencing slowdowns.</p>
+            </div>
+          </li>
+          <li>
+            <div class="form-check form-check-inline ms-3">
+              <input class="form-check-input" type="checkbox" id="cbxShowDMCACriticalTracks">
+              <label class="form-check-label" for="cbxShowDMCACriticalTracks">Show DMCA critical tracks</label>
+              <p class="hint">Those tracks are not stream safe, and could produce DMCA claims. Don't use them if you plan on monetizing your content! Maintain this option disabled if you want to be on the safe side.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
     </nav>
 
     <div class="container mt-3">
@@ -884,50 +972,6 @@
 
               <div class="col mx-2 search-input">
                 <input type="text" id="txtSearchGames" placeholder="Games list" class="px-2">
-              </div>
-
-              <div class="nav-item dropdown col-auto ms-auto">
-                <button id="btnDownload" type="button" class="btn btn-link nav-link dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                  <i class="fa-solid fa-download"></i>
-                </button>
-                <ul class="dropdown-menu">
-                  <li><h6 class="dropdown-header">Export options:</h6></li>
-                  <li>
-                    <div class="form-check form-check-inline ms-3">
-                      <input class="form-check-input" type="checkbox" id="cbxMaintainFolderStructure">
-                      <label class="form-check-label" for="cbxMaintainFolderStructure">Maintain folder structure</label>
-                    </div>
-                  </li>
-                  <li>
-                    <div class="form-check form-check-inline ms-3">
-                      <input class="form-check-input" type="checkbox" id="cbxUseShortGameNames">
-                      <label class="form-check-label" for="cbxUseShortGameNames">Use short game names</label>
-                    </div>
-                  </li>
-                  <hr class="my-2">
-                  <li><h6 class="dropdown-header">Volume pre-amplifying:</h6></li>
-                  <li>
-                    <div class="px-3 row">
-                      <div class="col">
-                        <input type="range" class="form-range" min="-100" max="100" step="1" id="rgVolumePreAmplifying" list="dtVolumePreAmplifying"
-                          oninput="$('#lbVolumePreAmplifying').text((parseInt(this.value) > 0 ? '+' : '') + this.value)">
-                        <datalist id="dtVolumePreAmplifying">
-                          <option value="-100" label="-100"></option>
-                          <option value="0" label="0"></option>
-                          <option value="100" label="+100"></option>
-                        </datalist>
-                      </div>
-                      <span class="col-auto ps-0" style="width: 50px;" id="lbVolumePreAmplifying">0</span>
-                    </div>
-                  </li>
-
-                  <hr class="my-2">
-                  <li>
-                    <a class="dropdown-item" href="#" id="btnDownloadSongPack">
-                      <i class="fa-solid fa-download"></i> Download song pack <span class="opacity-50">| ZIP</span>
-                    </a>
-                  </li>
-                </ul>
               </div>
             </div>
             <div id="panelGames" class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 6.8rem)">
@@ -941,20 +985,27 @@
             <h5 class="mb-0 border-bottom px-3 pb-3" id="lbTitleSongs">Songs view</h5>
 
             <div id="panelSongViewOptions" class="border-bottom py-2 px-3">
-              <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="checkbox" id="cbxViewMetadata">
-                <label class="form-check-label" for="cbxViewMetadata">Show composers/converters</label>
-              </div>
+              <div class="row">
+                <div class="col">
+                  <div class="form-check form-check-inline form-switch">
+                    <input class="form-check-input" type="checkbox" id="cbxViewMetadata">
+                    <label class="form-check-label" for="cbxViewMetadata">Show composers/converters</label>
+                  </div>
+    
+                  <div class="form-check form-check-inline form-switch">
+                    <input class="form-check-input" type="checkbox" id="cbxViewCategories">
+                    <label class="form-check-label" for="cbxViewCategories">Show categories</label>
+                  </div>
+    
+                  <div class="form-check form-check-inline form-switch">
+                    <input class="form-check-input" type="checkbox" id="cbxViewFormat" checked>
+                    <label class="form-check-label" for="cbxViewFormat">Show file format</label>
+                  </div>
+                </div>
 
-              <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="checkbox" id="cbxViewCategories">
-                <label class="form-check-label" for="cbxViewCategories">Show categories</label>
+                <i title="Change song view" id="btnChangeSongView" class="fa-solid fa-lg fa-list nav-link pe-2 col-auto" style="cursor: pointer; padding-top: 13px;"></i>
               </div>
-
-              <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="checkbox" id="cbxViewFormat" checked>
-                <label class="form-check-label" for="cbxViewFormat">Show file format</label>
-              </div>
+              
             </div>
             <div class="overflow-y-auto overflow-x-hidden" style="height: calc(100vh - 46.5px - 9.4rem)">
               <div id="panelSongView">
