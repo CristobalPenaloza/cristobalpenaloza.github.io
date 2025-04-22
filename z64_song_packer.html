@@ -49,9 +49,20 @@
       import { MMCategories } from "./js/mmcategories.js";
 
       var defaultSettings = {
-        selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
-        // TODO: ADD MORE OPTIONS!!!
+        // Default options
+        autosaveSelections: false,
+        showDMCACriticalTracks: false,
+        isListView: true,
+        viewMetadata: false,
+        viewCategories: false,
+        viewFormat: true,
+        maintainFolderStructure: false,
+        useShortGameNames: false,
+        volumePreAmplifying: 0,
+
+        // Available repos
         // TODO: ADD THE REAL REPOS!!!
+        selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
         userRepos: [
           { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
           { id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
@@ -66,6 +77,8 @@
       var selectedSeries = [];
       var currentSongList = [];
       var filteredDatabase = [];
+      var autosaveSelections = false;
+      var showDMCACriticalTracks = false;
       var isListView = true;
 
       function toast(message){
@@ -75,9 +88,24 @@
       }
 
       function saveSettings(){
+        saveSettingsToStorage();
+        toast("Selections saved to the browser's local storage!");
+      }
+      function saveSettingsToStorage(){
         var settings = getSettings();
 
-        // Start by saving the selected repo
+        // Start with the user options
+        settings.autosaveSelections = autosaveSelections;
+        settings.showDMCACriticalTracks = showDMCACriticalTracks;
+        settings.isListView = isListView;
+        settings.viewMetadata = $("#cbxViewMetadata").is(":checked");
+        settings.viewCategories = $("#cbxViewCategories").is(":checked");
+        settings.viewFormat = $("#cbxViewFormat").is(":checked");
+        settings.maintainFolderStructure = $("#cbxMaintainFolderStructure").is(":checked");
+        settings.useShortGameNames = $("#cbxUseShortGameNames").is(":checked");
+        settings.volumePreAmplifying = parseInt($("#rgVolumePreAmplifying").val());
+
+        // Then, save selected repo
         settings.selectedRepoId = selectedRepo.repoId;
 
         // Now, save also the user selections for this current repo
@@ -121,6 +149,19 @@
         // For now, I think it would be better to just use predefined repos
         // That ways is less cumbersome, and clearer for the users
         var settings = getSettings();
+
+        // Load the user's settings!
+        autosaveSelections = settings.autosaveSelections;
+        showDMCACriticalTracks = settings.showDMCACriticalTracks;
+        isListView = settings.isListView;
+        $("#cbxViewMetadata").prop('checked', settings.viewMetadata);
+        $("#cbxViewCategories").prop('checked', settings.viewCategories);
+        $("#cbxViewFormat").prop('checked', settings.viewFormat);
+        $("#cbxMaintainFolderStructure").prop('checked', settings.maintainFolderStructure);
+        $("#cbxUseShortGameNames").prop('checked', settings.useShortGameNames);
+        $("#rgVolumePreAmplifying").val(settings.volumePreAmplifying).trigger("input");
+
+        // Now load their selections
         //var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
         var userRepos = defaultSettings.userRepos.map(r => r.id);
         repos = [];
@@ -261,8 +302,8 @@
           var modalRepoSelection = bootstrap.Modal.getInstance('#modalRepoSelection');    
           modalRepoSelection?.hide();
 
-          // Save our selection in the settings
-          saveSettings();
+          // Save our selections to storage
+          saveSettingsToStorage();
         }
       }
 
@@ -773,6 +814,9 @@
         // We finally, download the generated zip
         var blob = await zip.generateAsync({ type: "blob" });
         saveAs(blob, `${selectedRepo.name} - Song Pack - ${Date.now()}.zip`);
+
+        // Also save our settings and selections and finish
+        saveSettingsToStorage();
         $("#loadingOverlay").addClass("d-none");
       }
 
@@ -783,7 +827,10 @@
       $(function(){
         init();
         $("#modalSongPreview").on("hide.bs.modal", stopPreview);
-        $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", updateSongViewOptions);
+        $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", function(){
+          updateSongViewOptions();
+          saveSettings();
+        });
         $("#btnDownloadSongPack").on("click", downloadSongPack);
         $("#btnApplyFilters").on("click", applyFilters);
         $("#btnResetFilters").on("click", resetFilters);
@@ -801,16 +848,38 @@
         });
 
         
+        // ----- TOP LEVEL BUTTONS -----
         $("#btnSaveSelections").on("click", function(){
           saveSettings();
-          toast("Selections saved to the browser's local storage!");
         });
         $("#btnTheme").on("click", function(){
           var theme = $("html").attr("data-bs-theme");
           $("html").attr("data-bs-theme", theme == "dark" ? "light" : "dark");
         });
 
+        // ----- CONFIG OPTIONS -----
+        $("#cbxAutosaveSelections").on("change", function(){
+          autosaveSelections = this.checked;
+          saveSettings();
+        });
+        $("#cbxShowDMCACriticalTracks").on("change", function(){
+          showDMCACriticalTracks = this.checked;
+          saveSettings();
+        });
+        $("#btnExportSettings").on("click", function(){
+          saveSettingsToStorage();
+          var settings = getSettings();
+          var fileName = 'myData.json';
+          var settingsBlob = new Blob([JSON.stringify(settings)], {
+              type: 'application/json'
+          });
+          saveAs(settingsBlob, `Z64 Song Packer - Settings - ${Date.now()}.json`);
+        });
+        $("#btnImportSettings").on("click", function(){
+          
+        });
 
+        // ----- NAV OPTIONS -----
         $("#txtSearchGames").on("input", function(){
           loadGamesList();
         });
@@ -818,6 +887,7 @@
         $("#btnChangeSongView").on("click", function(){
           isListView = !isListView;
           loadSongsList(currentSongList);
+          saveSettings();
         });
       });
     </script>
@@ -943,7 +1013,7 @@
           data-bs-auto-close="outside" aria-expanded="false">
           <i class="fa-solid fa-lg fa-cog"></i>
         </button>
-        <ul class="dropdown-menu dropdown-menu-end pb-0" style="min-width: 400px">
+        <ul class="dropdown-menu dropdown-menu-end pb-3" style="min-width: 400px">
           <li><h6 class="dropdown-header">Configuration:</h6></li>
           <li>
             <div class="form-check form-check-inline ms-3">
@@ -957,6 +1027,18 @@
               <input class="form-check-input" type="checkbox" id="cbxShowDMCACriticalTracks">
               <label class="form-check-label" for="cbxShowDMCACriticalTracks">Show DMCA critical tracks</label>
               <p class="hint">Those tracks are not stream safe, and could produce DMCA claims. Don't use them if you plan on monetizing your content! Maintain this option disabled if you want to be on the safe side.</p>
+            </div>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li><h6 class="dropdown-header">Export/Import settings:</h6></li>
+          <li>
+            <div class="row mx-2">
+              <button type="button" id="btnExportSettings" class="btn btn-search col ms-2 me-1">
+                <i class="fas fa-download me-2"></i>Export settings
+              </button>
+              <button type="button" id="btnImportSettings" class="btn btn-search col ms-1 me-2">
+                <i class="fas fa-upload me-2"></i>Export settings
+              </button>
             </div>
           </li>
         </ul>
