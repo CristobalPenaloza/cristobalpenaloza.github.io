@@ -50,6 +50,7 @@
 
       var defaultSettings = {
         // Default options
+        darkTheme: true,
         autosaveSelections: false,
         showDMCACriticalTracks: false,
         isListView: true,
@@ -87,15 +88,16 @@
         t.show();
       }
 
-      function saveSettings(){
+      function saveSettings(asSettings = true){
         saveSettingsToStorage();
-        toast("Selections saved to the browser's local storage!");
+        toast((asSettings ? "Settings" : "Selections") + " saved to the browser's local storage!");
       }
       function saveSettingsToStorage(){
         var settings = getSettings();
 
         // Start with the user options
-        settings.autosaveSelections = autosaveSelections;
+        settings.darkTheme = $("html").attr("data-bs-theme") == "dark";
+        settings.autosaveSelections = autosaveSelections; 
         settings.showDMCACriticalTracks = showDMCACriticalTracks;
         settings.isListView = isListView;
         settings.viewMetadata = $("#cbxViewMetadata").is(":checked");
@@ -110,7 +112,7 @@
 
         // Now, save also the user selections for this current repo
         var userRepos = settings.userRepos || [];
-        var uuidSelections = selections.map(i => database[i].uuid);
+        var uuidSelections = selections.map(i => database[i].uuid); // TODO: ESTO TIRA ERROR SI 
         var repoIndex = userRepos.findIndex(r => r.id == selectedRepo.repoId);
 
         // If we cant find the repo, just add it as a new one
@@ -139,6 +141,40 @@
       function deleteSettings(){
         localStorage.removeItem("settings");
       }
+      const toText = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+      async function loadSettingsFromFile(event){
+        $("#loadingOverlay").removeClass("d-none");
+        try{
+          var file = event.target.files[0];
+          var settingsText = await toText(file);
+          var settingsJson = JSON.parse(settingsText);
+
+          // TODO: CHECK IF IMPORTANT SETTINGS ARE MISSINGS, AND SO, REJECT THIS FILE
+
+          // Fix any missing properties
+          for (const [key, value] of Object.entries(defaultSettings)) {
+            // console.log(`${key}: ${value}`);
+
+            // If we dont have a property, assign the default value! 
+            if(!settingsJson.hasOwnProperty(key)){
+              settingsJson[key] = value;
+            }
+          }
+
+          // Actually save the new settings!
+          localStorage.settings = btoa(JSON.stringify(settingsJson));
+
+        } catch(e){
+          toast("There was an error! These settings file seems to be corrupted...");
+        }
+
+        init();
+      }
 
 
       async function init(){
@@ -146,84 +182,94 @@
         // const octokit = new Octokit();
         $("#loadingOverlay").removeClass("d-none");
 
-        // For now, I think it would be better to just use predefined repos
-        // That ways is less cumbersome, and clearer for the users
-        var settings = getSettings();
+        try{
+           // For now, I think it would be better to just use predefined repos
+          // That ways is less cumbersome, and clearer for the users
+          var settings = getSettings();
 
-        // Load the user's settings!
-        autosaveSelections = settings.autosaveSelections;
-        showDMCACriticalTracks = settings.showDMCACriticalTracks;
-        isListView = settings.isListView;
-        $("#cbxViewMetadata").prop('checked', settings.viewMetadata);
-        $("#cbxViewCategories").prop('checked', settings.viewCategories);
-        $("#cbxViewFormat").prop('checked', settings.viewFormat);
-        $("#cbxMaintainFolderStructure").prop('checked', settings.maintainFolderStructure);
-        $("#cbxUseShortGameNames").prop('checked', settings.useShortGameNames);
-        $("#rgVolumePreAmplifying").val(settings.volumePreAmplifying).trigger("input");
+          // Load the user's settings!
+          $("html").attr("data-bs-theme", settings.darkTheme ? "dark" : "light");
+          $("#cbxAutosaveSelections").prop('checked', settings.autosaveSelections);
+          autosaveSelections = settings.autosaveSelections;
+          $("#cbxShowDMCACriticalTracks").prop('checked', settings.showDMCACriticalTracks);
+          showDMCACriticalTracks = settings.showDMCACriticalTracks;
+          isListView = settings.isListView;
+          $("#cbxViewMetadata").prop('checked', settings.viewMetadata);
+          $("#cbxViewCategories").prop('checked', settings.viewCategories);
+          $("#cbxViewFormat").prop('checked', settings.viewFormat);
+          $("#cbxMaintainFolderStructure").prop('checked', settings.maintainFolderStructure);
+          $("#cbxUseShortGameNames").prop('checked', settings.useShortGameNames);
+          $("#rgVolumePreAmplifying").val(settings.volumePreAmplifying).trigger("input");
 
-        // Now load their selections
-        //var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
-        var userRepos = defaultSettings.userRepos.map(r => r.id);
-        repos = [];
+          // Now load their selections
+          //var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
+          var userRepos = defaultSettings.userRepos.map(r => r.id);
+          repos = [];
 
-        // Load the properties from each repo
-        // We do this every time, to always have the latest version of each one
-        await Promise.all(userRepos.map(async (id) => {
-          var idSplitted = id.split("/");
-          var owner = idSplitted[0];
-          var repo = idSplitted[1];
-          var defaultBranch = idSplitted[2];
+          // Load the properties from each repo
+          // We do this every time, to always have the latest version of each one
+          await Promise.all(userRepos.map(async (id) => {
+            var idSplitted = id.split("/");
+            var owner = idSplitted[0];
+            var repo = idSplitted[1];
+            var defaultBranch = idSplitted[2];
 
-          // Get the z64musicpacker.properties from this repo
-          // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
-          var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
-          var propertiesResponse = await fetch(z64PropertiesLink);
+            // Get the z64musicpacker.properties from this repo
+            // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
+            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
+            var propertiesResponse = await fetch(z64PropertiesLink);
 
-          if(propertiesResponse.ok){
-            // Read the file
-            var properties = await propertiesResponse.json();
-            console.log(properties);
-            console.log(propertiesResponse);
+            if(propertiesResponse.ok){
+              // Read the file
+              var properties = await propertiesResponse.json();
+              console.log(properties);
+              console.log(propertiesResponse);
 
-            // Load the repo into our list
-            repos.push({
-              repoName: repo,
-              repoOwner: owner,
-              repoDefaultBranch: defaultBranch,
-              repoId: id,
+              // Load the repo into our list
+              repos.push({
+                repoName: repo,
+                repoOwner: owner,
+                repoDefaultBranch: defaultBranch,
+                repoId: id,
 
-              // Import Z64 music packer properties
-              ...properties,
-            });
-          }
-        }));
+                // Import Z64 music packer properties
+                ...properties,
+              });
+            }
+          }));
 
-        
-        // TODO: ADD THE REPOS TO THE MAIN SELECT
-        repos.forEach((repo, i) => {
-          $("#panelRepoSelection").append(
-            `<button type="button" class="btn border w-100 mb-3" id="btnSelectRepo${i}">
-              <div class="row">
-                <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
-                <div class="col text-start">
-                  <h5 class="mb-0">${repo.name}</h5>
-                  <span class="opacity-500">${repo.description}</span>
+          
+          // TODO: ADD THE REPOS TO THE MAIN SELECT
+          repos.forEach((repo, i) => {
+            $("#panelRepoSelection").append(
+              `<button type="button" class="btn border w-100 mb-3" id="btnSelectRepo${i}">
+                <div class="row">
+                  <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
+                  <div class="col text-start">
+                    <h5 class="mb-0">${repo.name}</h5>
+                    <span class="opacity-500">${repo.description}</span>
+                  </div>
                 </div>
-              </div>
-            </button>`
-          );
-          $(`#btnSelectRepo${i}`).on("click", function(){
-            selectedRepo = repo;
-            loadRepo();
+              </button>`
+            );
+            $(`#btnSelectRepo${i}`).on("click", function(){
+              selectedRepo = repo;
+              loadRepo();
+            });
           });
-        });
-        
-        // Try to load the selected repo from the storage
-        var selectedRepoId = settings.selectedRepoId;
-        selectedRepo = repos.find(r => r.repoId == selectedRepoId) || repos[0];
+          
+          // Try to load the selected repo from the storage
+          var selectedRepoId = settings.selectedRepoId;
+          selectedRepo = repos.find(r => r.repoId == selectedRepoId) || repos[0];
 
-        await loadRepo();
-        $("#loadingOverlay").addClass("d-none");
+          await loadRepo();
+          $("#loadingOverlay").addClass("d-none");
+
+        } catch(e){
+          toast("An error ocurred while loading! Reseting settings...");
+          deleteSettings();
+          init();
+        }
       }
 
 
@@ -251,8 +297,8 @@
         var dbLink = rawLink + "z64songs.json";
         var dbResponse = await fetch(dbLink);
         if(dbResponse.ok){
-          // Load the database
-          database = await dbResponse.json();
+          // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
+          database = (await dbResponse.json()).filter((s) => showDMCACriticalTracks ? true : (s.isDMCACritical ?? false) == false);
           database.forEach((item, i) => {
             // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
             item.index = i;
@@ -304,6 +350,9 @@
 
           // Save our selections to storage
           saveSettingsToStorage();
+
+          // Load default song view
+          loadSongsList([]);
         }
       }
 
@@ -693,6 +742,9 @@
 
         // Update the BGM and Fanfare panel count
         updatePanelsSelectedCount();
+
+        // Save to storage if we have the option enabled
+        if(autosaveSelections) saveSettingsToStorage();
       }
       function updatePanelsSelectedCount(){
         var bgmCount = $("#panelSongView .btn-song").length;
@@ -850,11 +902,12 @@
         
         // ----- TOP LEVEL BUTTONS -----
         $("#btnSaveSelections").on("click", function(){
-          saveSettings();
+          saveSettings(false);
         });
         $("#btnTheme").on("click", function(){
           var theme = $("html").attr("data-bs-theme");
           $("html").attr("data-bs-theme", theme == "dark" ? "light" : "dark");
+          saveSettings();
         });
 
         // ----- CONFIG OPTIONS -----
@@ -865,19 +918,21 @@
         $("#cbxShowDMCACriticalTracks").on("change", function(){
           showDMCACriticalTracks = this.checked;
           saveSettings();
+          loadRepo(); // Reload repo to remove/add the DMCA critical tracks... We need this to affect exporting too!
         });
+
         $("#btnExportSettings").on("click", function(){
           saveSettingsToStorage();
           var settings = getSettings();
-          var fileName = 'myData.json';
           var settingsBlob = new Blob([JSON.stringify(settings)], {
               type: 'application/json'
           });
-          saveAs(settingsBlob, `Z64 Song Packer - Settings - ${Date.now()}.json`);
+          saveAs(settingsBlob, `Z64 Song Packer - Settings and selections - ${Date.now()}.z64packersettings`);
         });
         $("#btnImportSettings").on("click", function(){
-          
+          $("#fileImportSettings").trigger("click");
         });
+        $("#fileImportSettings").on("change", loadSettingsFromFile);
 
         // ----- NAV OPTIONS -----
         $("#txtSearchGames").on("input", function(){
@@ -1030,15 +1085,16 @@
             </div>
           </li>
           <li><hr class="dropdown-divider"></li>
-          <li><h6 class="dropdown-header">Export/Import settings:</h6></li>
+          <li><h6 class="dropdown-header">Export/Import settings and selections:</h6></li>
           <li>
             <div class="row mx-2">
               <button type="button" id="btnExportSettings" class="btn btn-search col ms-2 me-1">
                 <i class="fas fa-download me-2"></i>Export settings
               </button>
               <button type="button" id="btnImportSettings" class="btn btn-search col ms-1 me-2">
-                <i class="fas fa-upload me-2"></i>Export settings
+                <i class="fas fa-upload me-2"></i>Import settings
               </button>
+              <input type="file" id="fileImportSettings" accept=".z64packersettings" hidden>
             </div>
           </li>
         </ul>
