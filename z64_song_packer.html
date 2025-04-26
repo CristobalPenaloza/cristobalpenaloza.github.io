@@ -571,6 +571,14 @@
           );
           var isSelected = selections.includes(s.index);
           var hasPreview = !! s.preview; // <-- We check if the preview exists first
+          var isDMCACritical = s.isDMCACritical ?? false;
+
+          var offsetDate = new Date();
+          offsetDate.setDate(offsetDate.getDate() - 5);
+          var isNew = Date.parse(s.creationDate) >= offsetDate;
+          var isUpdated = Date.parse(s.lastUpdateDate) >= offsetDate;
+          var badgeAppend = (isNew || isUpdated) ? ` <span class="badge text-bg-secondary">${isNew ? "New" : "Updated"}</span>` : "";
+          if(isDMCACritical) badgeAppend += ` <span class="badge text-bg-danger">Unsafe</span>`;
 
           // LIST VIEW
           if(isListView){
@@ -579,7 +587,7 @@
                 <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                   <div class="row align-items-center g-2">
                     <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
-                    <b class="col">${s.song}</b>
+                    <b class="col">${s.song}${badgeAppend}</b>
                     <div class='metadata col'>
                       <span><i class="fa-solid fa-music fa-fw"></i> ${toArray(s.composers).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span><br>
                       <span><i class="fa-solid fa-wave-square fa-fw"></i> ${toArray(s.converters).join(", ") || "<span class='opacity-50'>Unknown</span>"}</span>
@@ -606,7 +614,7 @@
               `<div class="col-3">
                 <div class="card btn-song ${isSelected ? "active" : ""}" id="btnSong${i}" data-song="${s.uuid}">
                   <div class="row align-items-center g-2">
-                    <b class="col">${s.song}</b>
+                    <b class="col">${s.song}${badgeAppend}</b>
                     <i id="btnDownload${i}" class="col-auto fa-solid fa-download" title="Download this song"></i>
                     <i id="btnPreview${i}" class="col-auto fa-solid fa-play ${hasPreview ? "" : "opacity-25"}" title="Preview"></i>
                   </div>
