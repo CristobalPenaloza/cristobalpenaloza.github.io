@@ -669,6 +669,13 @@
 
       function previewSong(song){
         var preview = song.preview;
+        
+        // If it's local, grab it from our repo!
+        if(!preview.startsWith("https://")){
+          preview = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.previews}/${song.preview}`.replaceAll("//", "/");
+        }
+
+        console.log("Playing preview... " + preview);
         $("#lbTitleSongPreview").text(song.game + " - " + song.song);
         $("#panelAudioPreview, #panelYouTubePreview").addClass("d-none");
 
@@ -690,15 +697,6 @@
           }
 
         } else{
-          // If it's a Discord file, use a proxy to renew the access token
-          // Shouts out to Serinamoe on Reddit for providing this proxy! Thank you so much!
-          // TODO: THIS IS NO LONGER WORKING, I'LL NEED TO CREATE A NEW PROXY!
-          // I think the name changed on march 2025... https://dnshistory.org/historical-dns-records/cname/cdn.discordapp.xyz
-          // The IP seems to be 218.153.236.48, but I think is no longer working...
-          if(preview.startsWith("https://cdn.discordapp.com")){
-            preview = "https://z64-discord-cdn-proxy.wl.r.appspot.com?" + preview;
-          }
-
           // Load the preview
           $("#asrcSongPreview").attr("src", preview);
 

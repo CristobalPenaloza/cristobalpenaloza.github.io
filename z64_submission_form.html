@@ -94,6 +94,7 @@
 
       var authToken = "";
       var fileBase64 = "";
+      var previewBase64 = "";
 
       // Info about the user:
       var username = "";
@@ -357,7 +358,12 @@
         $("#txtComposers").val(toArray(songToEdit.composers).join(", "));
         $("#txtConverters").val(toArray(songToEdit.converters).join(", "));
         $("#cbxIsDMCACritical").prop('checked', songToEdit.isDMCACritical ? true : false);
-        $("#txtPreviewLink").val(songToEdit.preview);
+
+        // Also select the preview file
+        var previewType = ((songToEdit.preview ?? "") == "") ? "" : (songToEdit.preview.startsWith("https://") ? "link" : "file");
+        $("#ddlPreviewType").val(previewType);
+        $("#ddlPreviewType").trigger("change");
+        if(previewType == "link") $("#txtPreviewLink").val(songToEdit.preview);
 
         // Also, make fileUpload optional, when we only want to modify metadata and not the file itself
         $("#fileUpload")[0].required = false;
@@ -477,6 +483,36 @@
       });
 
 
+      // ----- PREVIEW FILE PROCESSING -----
+      async function processPreviewFile(){
+        try{
+          $("#loadingOverlay").removeClass("d-none");
+          var file = event.target.files[0];
+          previewBase64 = (await toBase64(file)).split(",").pop();
+
+          // If it's an mp3 file, finish
+          if(file.name.toLowerCase().endsWith(".mp3")){
+            $("#loadingOverlay").addClass("d-none");
+
+          // If it's NOT a mp3 file, then thrown an error
+          } else{
+            toast("This preview file is not an mp3 file!");
+            clearPreviewInput();
+          }
+
+        } catch(e){
+          toast(`Couldn't process the preview file: ${e}`);
+          clearPreviewInput();
+        }
+      }
+      function clearPreviewInput(){
+        previewBase64 = "";
+        $("#filePreview").val("");
+        $("#loadingOverlay").addClass("d-none");
+      }
+
+
+      // ----- CLEARING -----
       function clearFullSubmissionForm(){
         $("input[name=rbSubmissionType]").prop('checked', false);
         $("#mainForm").addClass("d-none");
@@ -490,7 +526,10 @@
         $("#txtComposers").val("");
         $("#txtConverters").val("");
         $("#cbxIsDMCACritical").prop('checked', false);
+        $("#ddlPreviewType").val("");
         $("#txtPreviewLink").val("");
+        clearPreviewInput();
+        $("#ddlPreviewType").trigger("change");
         $("#txtNotes").val("");
         $("#mainForm").removeClass("was-validated");
 
@@ -499,6 +538,9 @@
         $("#fileUpload")[0].required = true;
         songToEdit = undefined;
       }
+
+
+      // ----- FINISH SUBMISSION -----
       async function submitForm(){
 
         // Check if the form is valid first
@@ -529,6 +571,7 @@
         // CHECK IF WE ARE IN EDIT MODE
         var editMode = songToEdit != undefined;
         var originalFilePath = songToEdit?.file;
+        var originalPreviewPath = songToEdit?.preview;
 
         // Create the new entry
         // If we are editing, just grab the existing entry
@@ -549,7 +592,6 @@
         entry.composers = toArray($("#txtComposers").val());
         entry.converters = toArray($("#txtConverters").val());
         entry.isDMCACritical = $("#cbxIsDMCACritical").is(":checked");
-        entry.preview = $("#txtPreviewLink").val();
 
         // If we have a file selected... update the path
         if(fileBase64.length > 0){
@@ -560,9 +602,17 @@
 
           // Generate a local path for the entry
           var extension = $("#lbFormat").text().toLowerCase();
-          var fileLocalPath = entry.game + "/" + entry.song + "." + extension;
-          var finalPath = selectedRepo.binaries + fileLocalPath;
-          entry.file = fileLocalPath;
+          entry.file = entry.game + "/" + entry.song + "." + extension;
+        }
+
+        // Add/modify the preview link/file
+        entry.preview = "";
+        if($("#ddlPreviewType").val() == "link") entry.preview = $("#txtPreviewLink").val();
+        else if(previewBase64.length > 0){
+          // Generate a local path for the preview and upload it as a commit
+          entry.preview = entry.game + "/" + entry.song + ".mp3";
+          var previewCommitResult = commitFileToRepo(octokit, previewBase64, selectedRepo.previews, originalPreviewPath, entry.preview);
+          if(!previewCommitResult) return;
         }
 
         // Add this entry to the json file
@@ -575,8 +625,11 @@
         }
 
         // If we have a file selected, upload it as a new commit
-        if(fileBase64.length > 0){
+        var fileCommitResult = await commitFileToRepo(octokit, fileBase64, selectedRepo.binaries, originalFilePath, entry.file);
+        if(!fileCommitResult) return;
 
+        // OLD METHOD
+        /*if(fileBase64.length > 0){
           // If we are editing, get the file SHA we are trying to edit
           var fileSha = null;
           if(editMode){
@@ -629,7 +682,7 @@
             $("#loadingOverlay").addClass("d-none");
             return;
           }
-        }
+        }*/
         
 
         // Update the database
@@ -717,8 +770,66 @@
         $("#loadingOverlay").addClass("d-none");
       }
 
+      async function commitFileToRepo(octokit, fileBase64, folder, originalPath, finalPath){
+        if(fileBase64.length > 0){
+          // If we are editing, get the file SHA we are trying to edit
+          var fileSha = null;
+          var editMode = (originalPath ?? "") != "";
+          if(editMode){
+            var getFileResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: username,
+              repo: selectedRepo.repoName,
+              path: folder + originalPath,
+            }).catch((err) => {
+              err = `Couldn't get original file from the repo: ${err}`;
+            });
+            if(getFileResponse === undefined) {
+              $("#loadingOverlay").addClass("d-none");
+              return false;
+            }
+            fileSha = getFileResponse.data.sha;
 
-      // Utils
+            // If the filename will be different, then delete the original file for a clean replacement
+            // WE HAVE TO DO THIS, since the unique names are needed to prevent duplication or overwrites
+            if((folder + originalPath) != (folder + finalPath)){
+              var deleteFileResponse = await octokit.request('DELETE /repos/{owner}/{repo}/contents/{path}', {
+                owner: username,
+                repo: selectedRepo.repoName,
+                path: folder + originalPath,
+                message: `Delete file ${originalPath} for replacement`,
+                sha: fileSha,
+              }).catch((err) => {
+                err = `Couldn't delete original file from the repo: ${err}`;
+              });
+              if(deleteFileResponse === undefined){
+                $("#loadingOverlay").addClass("d-none");
+                return false;
+              }
+              fileSha = null; // <-- Reset the sha, since we will be creating a new file
+            }
+          }
+
+          // Finally, add or update the file
+          var uploadFileResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+            owner: username,
+            repo: selectedRepo.repoName,
+            path: folder + finalPath,
+            message: `${editMode ? "Modify" : "Add new"} file ${finalPath}`,
+            content: fileBase64,
+            sha: fileSha,
+          }).catch((err) => {
+            toast(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
+          });
+          if(uploadFileResult === undefined) {
+            $("#loadingOverlay").addClass("d-none");
+            return false;
+          }
+        }
+        return true;
+      }
+
+
+      // ----- UTILS -----
       // TODO: CHANGE STYLE FOR ERROR TOASTS
       function toast(message){
         var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
@@ -731,7 +842,8 @@
         else return [];
       }
 
-      // Document ready
+
+      // ----- DOCUMENT READY -----
       $(function(){
         // Submit mappings
         $("#btnLogin").on("click", userLogin);
@@ -782,9 +894,19 @@
 
           $("#txtSongName, #txtGameName").each(function(){ this.setCustomValidity(isDuplicate ? "invalid" : ""); });
           $("#txtSongName").siblings(".invalid-feedback").html(`<b>This song is already in this repo!</b><br>
-                If this is another version of the song, add something to differentiate it, like "Rosalina's Observatory (Tolin version)".<br>
+                If this is another version of the song, add something to differentiate it, like "Flock Step (Tolin version)".<br>
                 If you are trying to modify an existing song, use the "Modify/update an existing song" button above.`);
         });
+        
+
+        // Preview stuffs
+        $("#ddlPreviewType").on("change", function(){
+          $("#fgPreviewLink").toggleClass("d-none", this.value != "link");
+          $("#txtPreviewLink")[0].required = this.value == "link";
+          $("#fgPreviewFile").toggleClass("d-none", this.value != "file");
+          $("#filePreview")[0].required = songToEdit != undefined && this.value == "file"; // We allow optionals if we are editing to maintain the original file
+        });
+        $("#filePreview").on("change", processPreviewFile);
       });
     </script>
 
@@ -977,19 +1099,43 @@
             </div>
   
             <hr>
-  
+
+            <!-- BEWARE - THIS COULD NOT BE UPLOADED BECAUSE THE SELECT IS KINDA FINICKY -->
             <div class="form-group mb-3">
+              <label>Preview:</label>
+              <select id="ddlPreviewType" class="form-select" required>
+                <option value="">Select a preview type...</option>
+                <option value="link">YouTube link / Sound file link</option>
+                <option value="file">Direct MP3 upload</option>
+              </select>
+              <div class="invalid-feedback">
+                A preview is needed.
+              </div>
+            </div>
+  
+            <div class="form-group mb-3" id="fgPreviewLink">
               <label>Preview link:</label>
               <p class="hint">
                 Link to a preview of this song. Can it be on two formats:<br>
-                <b>• YouTube link:</b> link to a video uploaded to YouTube of your version of the song.<br>
-                <b>• Direct sound file link:</b> direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Internet Archive, Discord, GitHub, etc).
+                <b>• YouTube link:</b> a link to a video uploaded to YouTube of your version of the song.<br>
+                <b>• Direct sound file link:</b> a direct link to a sound file (.mp3, .wav, etc) uploaded on a public site (Internet Archive, GitHub, etc).
               </p>
               <input id="txtPreviewLink" type="text" class="form-control" pattern="https?://.+" required />
               <div class="invalid-feedback">
                 A valid preview link is required. Must be <b>https://</b>
               </div>
             </div>
+
+            <div id="fgPreviewFile">
+              <label>Preview file:</label>
+              <p class="hint">The preview sound file of your track. <b>Only MP3 files are allowed.</b> If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded preview file.</p>
+              <input id="filePreview" type="file" class="form-control" accept=".mp3" required/>
+              <div class="invalid-feedback">
+                A valid MP3 file is required.
+              </div>
+            </div>
+            
+            <hr>
   
             <div class="form-group mb-3">
               <label>Notes:</label>
