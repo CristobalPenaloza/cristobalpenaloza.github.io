@@ -606,7 +606,7 @@
         }
 
         // Add/modify the preview link/file
-        entry.preview = "";
+        // entry.preview = "";
         if($("#ddlPreviewType").val() == "link") entry.preview = $("#txtPreviewLink").val();
         else if(previewBase64.length > 0){
           // Generate a local path for the preview and upload it as a commit
@@ -628,64 +628,9 @@
         var fileCommitResult = await commitFileToRepo(octokit, fileBase64, selectedRepo.binaries, originalFilePath, entry.file);
         if(!fileCommitResult) return;
 
-        // OLD METHOD
-        /*if(fileBase64.length > 0){
-          // If we are editing, get the file SHA we are trying to edit
-          var fileSha = null;
-          if(editMode){
-            var originalPath = selectedRepo.binaries + originalFilePath;
-            var getFileResponse = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-              owner: username,
-              repo: selectedRepo.repoName,
-              path: originalPath,
-            }).catch((err) => {
-              err = `Couldn't get original file from the repo: ${err}`;
-            });
-            if(getFileResponse === undefined) {
-              $("#loadingOverlay").addClass("d-none");
-              return;
-            }
-            fileSha = getFileResponse.data.sha;
-
-            // If the filename will be different, then delete the original file for a clean replacement
-            // WE HAVE TO DO THIS, since the unique names are needed to prevent duplication or overwrites
-            if(originalFilePath != fileLocalPath){
-              var deleteFileResponse = await octokit.request('DELETE /repos/{owner}/{repo}/contents/{path}', {
-                owner: username,
-                repo: selectedRepo.repoName,
-                path: originalPath,
-                message: `Delete file ${entry.file} for replacement`,
-                sha: fileSha,
-              }).catch((err) => {
-                err = `Couldn't delete original file from the repo: ${err}`;
-              });
-              if(deleteFileResponse === undefined){
-                $("#loadingOverlay").addClass("d-none");
-                return;
-              }
-              fileSha = null; // <-- Reset the sha, since we will be creating a new file
-            }
-          }
-
-          // Finally, add or update the file
-          var uploadFileResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
-            owner: username,
-            repo: selectedRepo.repoName,
-            path: finalPath,
-            message: `${editMode ? "Modify" : "Add new"} file ${entry.file}`,
-            content: fileBase64,
-            sha: fileSha,
-          }).catch((err) => {
-            toast(`Couldn't upload the new file (${finalPath}) to the repo: ${err}`);
-          });
-          if(uploadFileResult === undefined) {
-            $("#loadingOverlay").addClass("d-none");
-            return;
-          }
-        }*/
-        
-
         // Update the database
+        // TODO: THIS CAN HAVE CONCURRENCY ISSUES!!
+        // We could wait...? or retry...?
         var updateDatabaseResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
           owner: username,
           repo: selectedRepo.repoName,
@@ -904,7 +849,7 @@
           $("#fgPreviewLink").toggleClass("d-none", this.value != "link");
           $("#txtPreviewLink")[0].required = this.value == "link";
           $("#fgPreviewFile").toggleClass("d-none", this.value != "file");
-          $("#filePreview")[0].required = songToEdit != undefined && this.value == "file"; // We allow optionals if we are editing to maintain the original file
+          $("#filePreview")[0].required = songToEdit == undefined && this.value == "file"; // We allow optionals if we are editing to maintain the original file
         });
         $("#filePreview").on("change", processPreviewFile);
       });

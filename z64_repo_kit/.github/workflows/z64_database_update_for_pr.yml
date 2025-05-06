@@ -1,0 +1,43 @@
+# Script for automating the run of the database fixer on merging pull requests
+
+# To install this workflow in your repo:
+# 1. Go to Actions > New workflow
+# 2. Go to "Set up a workflow yourself"
+# 3. Set the name of the new file to "z64_database_update_for_pr.yml"
+# 4. Copy and paste the contents of this file to the textbox that says "Enter file contents here"
+# 5. Finally, press "Commit changes"
+
+name: Z64 - Update database for PR
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+jobs:
+  if_merged:
+    if: github.event.pull_request.merged == true
+    permissions: write-all
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.x"]
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Run checks
+        run: python "z64_missing_song_detector.py" --ci
+        
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "<>"
+          git add -A
+          git commit -m "Database updated for PR #${{ github.event.number }}"
+          git push

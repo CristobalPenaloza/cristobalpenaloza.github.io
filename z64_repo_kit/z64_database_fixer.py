@@ -45,7 +45,7 @@ def detectSongs():
                             # This commented snippet is for giving priority to the folder-file structure.
                             # But that's impossible, since if a file is renamed, we cannot know to which one it corresponds!
                             # So, if a file is renamed, it will be eliminated, and then readded.
-                            # The only way to edit game names, is thru the submission form, or directly inside the database.
+                            # The only way to edit game names, is through the submission form, or directly inside the database.
 
                             # pathSplitted = actualPath.split('/')
                             # for index, pathSection in enumerate(reversed(pathSplitted)):
