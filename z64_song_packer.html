@@ -80,8 +80,11 @@
       var showDMCACriticalTracks = false;
       var isListView = true;
 
-      async function errorResponseToast(response){
-        toast(`An error ocurred: ${response.statusText} [${response.status}] | ${await response.text()}`);
+      function errorResponseToast(response){
+        toast(`An error ocurred: ${response.url} [${response.status}]`);
+        /*for (const pair of response.headers.entries()) {
+          console.log(`${pair[0]}: ${pair[1]}`);
+        }*/
       }
       function toast(message){
         var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
@@ -113,7 +116,7 @@
 
         // Now, save also the user selections for this current repo
         var userRepos = settings.userRepos || [];
-        var uuidSelections = selections.map(i => database[i].uuid); // TODO: ESTO TIRA ERROR SI 
+        var uuidSelections = selections.map(i => database[i].uuid);
         var repoIndex = userRepos.findIndex(r => r.id == selectedRepo.repoId);
 
         // If we cant find the repo, just add it as a new one
@@ -216,8 +219,10 @@
 
             // Get the z64musicpacker.properties from this repo
             // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
+            // DISCLAIMER: No fetch in this page will be cached... as we are getting information from github, and that info can change
+            // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
             var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
-            var propertiesResponse = await fetch(z64PropertiesLink);
+            var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
 
             if(propertiesResponse.ok){
               // Read the file
@@ -282,7 +287,7 @@
         // Set the main selector
         $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl);
         $("#lbRepoName").text(selectedRepo.name);
-        var rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
+        var rawLink =  `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
 
         // Reset!
         gamesDb = [];
@@ -290,7 +295,7 @@
 
         // Get the optional games database from the current repo
         var gamesDbLink = rawLink + "z64games.json";
-        var gamesDbResponse = await fetch(gamesDbLink);
+        var gamesDbResponse = await fetch(gamesDbLink, { cache: "no-store" });
         if(gamesDbResponse.ok){
           gamesDb = await gamesDbResponse.json();
         } else{
@@ -299,7 +304,7 @@
 
         // Get the database from the current repo
         var dbLink = rawLink + "z64songs.json";
-        var dbResponse = await fetch(dbLink);
+        var dbResponse = await fetch(dbLink, { cache: "no-store" });
         if(dbResponse.ok){
           // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
           database = (await dbResponse.json()).filter((s) => showDMCACriticalTracks ? true : (s.isDMCACritical ?? false) == false);
@@ -778,9 +783,9 @@
 
         // Fetch the single file. This is slow, but MUCH faster that bringing the full binaries zip
         // Although, now it doesnt work... >:(
-        var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`.replaceAll("//", "/");
+        var fileLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`.replaceAll("//", "/");
         console.log("Downloading... [" + fileLink + "]")
-        var fileResponse = await fetch(fileLink);
+        var fileResponse = await fetch(fileLink, { cache: "no-store" });
         if(fileResponse.ok){
           // Finally, download the file as a blob
           var extension = song.file.split('.').pop();
@@ -800,8 +805,8 @@
         var zip = new JSZip();
 
         // Fetch the full binaries.zip file
-        var binariesLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`.replaceAll("//", "/");
-        var binariesResponse = await fetch(binariesLink);
+        var binariesLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`.replaceAll("//", "/");
+        var binariesResponse = await fetch(binariesLink, { cache: "no-store" });
         if(binariesResponse.ok){
           var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
           // console.log(binaries);
@@ -863,7 +868,7 @@
 
             // Download the song from the github repository (OLD fetch version | changed because slow)
             /*var fileLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`;
-            var fileResponse = await fetch(fileLink);
+            var fileResponse = await fetch(fileLink, { cache: "no-store" });
             console.log(fileLink);
 
             if(fileResponse.ok){

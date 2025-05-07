@@ -88,6 +88,8 @@
   </script>
     <script type="module">
       import { Octokit, App } from "https://esm.sh/octokit";
+      import { retry } from "https://esm.sh/@octokit/plugin-retry";
+      import { throttling } from "https://esm.sh/@octokit/plugin-throttling";
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
       import * as bootstrap from "bootstrap";
       import { MMCategories } from "./js/mmcategories.js";
@@ -111,6 +113,37 @@
       // Modifying:
       var songToEdit = undefined;
 
+      // Custom octokit to prevent error, abuses, and rate limiting
+      const MyOctokit = Octokit.plugin(retry, throttling);
+      function buildOctokit(){
+        var octokit = new MyOctokit({
+          auth: authToken,
+          throttle: {
+            onRateLimit: (retryAfter, options) => {
+              octokit.log.warn(
+                `Request quota exhausted for request ${options.method} ${options.url}`,
+              );
+
+              // Retry twice after hitting a rate limit error, then give up
+              if (options.request.retryCount <= 2) {
+                // only retries once
+                octokit.log.info(`Retrying after ${retryAfter} seconds!`);
+                return true;
+              }
+            },
+            onSecondaryRateLimit: (retryAfter, options, octokit) => {
+              // does not retry, only logs a warning
+              octokit.log.warn(
+                `Secondary quota detected for request ${options.method} ${options.url}`,
+              );
+            },
+          },
+          retry: {
+            doNotRetry: ["429"],
+          },
+        });
+        return octokit;
+      }
 
       async function userLogin(){
         authToken = $("#txtGithubAuthToken").val();
@@ -125,7 +158,7 @@
           // TODO: SEPARATE THIS METHOD IN TWO PARTS, SO WE CAN GO BACK ONE STEP!!!
           // Get the token the user put
           
-          const octokit = new Octokit({ auth: authToken });
+          const octokit = buildOctokit();
 
           // Get the username of this token
           var user = await octokit.request('GET /user');
@@ -166,17 +199,16 @@
 
             // Try to get the z64musicpacker.properties file from the original repo
             // We don't use raw.githubusercontent.com, since it has a cache delay of 300 seconds (5 mins) that can cause issues
-            try{
-              var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-                owner: originalRepoOwner,
-                repo: repo.name,
-                path: "z64musicpacker.properties"
-              });
+            var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+              owner: originalRepoOwner,
+              repo: repo.name,
+              path: "z64musicpacker.properties",
+              request: { retries: 0 }
 
-            } catch(error){
-              //console.log(`${repo.name} is not a z64 repo`);
-              return;
-            }
+            }).catch((error) => {
+              // Console already throws an error... Search a way to hide it, since is correctly catched
+              // console.log(error.request.url + " is not and Z64 repository!");
+            });
 
             // TODO: Add version, and compatible files to z64musicpacker.properties
             
@@ -264,7 +296,7 @@
       }
 
       async function syncRepoAndGetLatestDatabase(){
-        const octokit = new Octokit({ auth: authToken });
+        const octokit = buildOctokit();
         var error = null;
         database = [];
 
@@ -556,7 +588,7 @@
         
 
         // Open octokit and trigger the overlay
-        const octokit = new Octokit({ auth: authToken });
+        const octokit = buildOctokit();
         $("#loadingOverlay").removeClass("d-none");
 
         // Get the latest database
@@ -710,7 +742,7 @@
         } else{
           // This throws an 403 forbidden error... we need more privileges, but that won't do
           // I think it will be better to just trigger this somehow with a workflow
-          /*var dispatchResult = await octokit.request('POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches', {
+          var dispatchResult = await octokit.request('POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches', {
             owner: selectedRepo.originalRepoOwner,
             repo: selectedRepo.repoName,
             workflow_id: 'z64_database_fixer.yml',
@@ -721,7 +753,7 @@
           });
 
           console.log("WORKFLOW DISPATCH RESULT:");
-          console.log(dispatchResult);*/
+          console.log(dispatchResult);
         }
         
         toast("Process completed!");
