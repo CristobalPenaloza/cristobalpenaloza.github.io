@@ -43,8 +43,6 @@
     }
     </script>
     <script type="module">
-      import { Octokit, App } from "https://esm.sh/octokit";
-      import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
       import * as bootstrap from "bootstrap";
       import { MMCategories } from "./js/mmcategories.js";
 
@@ -82,6 +80,9 @@
       var showDMCACriticalTracks = false;
       var isListView = true;
 
+      async function errorResponseToast(response){
+        toast(`An error ocurred: ${response.statusText} [${response.status}] | ${await response.text()}`);
+      }
       function toast(message){
         var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
         $("#toastBody").text(message);
@@ -179,7 +180,6 @@
 
       async function init(){
         // We don't need auth for the stuff we will be doing here...
-        // const octokit = new Octokit();
         $("#loadingOverlay").removeClass("d-none");
 
         try{
@@ -235,6 +235,9 @@
                 // Import Z64 music packer properties
                 ...properties,
               });
+
+            } else{
+              errorResponseToast(propertiesResponse);
             }
           }));
 
@@ -290,7 +293,8 @@
         var gamesDbResponse = await fetch(gamesDbLink);
         if(gamesDbResponse.ok){
           gamesDb = await gamesDbResponse.json();
-          //console.log(gamesDb);
+        } else{
+          errorResponseToast(gamesDbResponse);
         }
 
         // Get the database from the current repo
@@ -353,6 +357,9 @@
 
           // Load default song view
           loadSongsList([]);
+
+        } else{
+          errorResponseToast(dbResponse);
         }
       }
 
@@ -672,7 +679,7 @@
         
         // If it's local, grab it from our repo!
         if(!preview.startsWith("https://")){
-          preview = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.previews}/${song.preview}`.replaceAll("//", "/");
+          preview = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.previews}/${song.preview}`.replaceAll("//", "/");
         }
 
         console.log("Playing preview... " + preview);
@@ -775,14 +782,13 @@
         console.log("Downloading... [" + fileLink + "]")
         var fileResponse = await fetch(fileLink);
         if(fileResponse.ok){
-
           // Finally, download the file as a blob
           var extension = song.file.split('.').pop();
           var blob = await fileResponse.blob();
           saveAs(blob, `${song.game} - ${song.song}.${extension}`);
 
         } else{
-          console.log(fileResponse);
+          errorResponseToast(fileResponse);
         }
         $("#loadingOverlay").addClass("d-none");
       }
@@ -867,6 +873,9 @@
               zip.file(fileName, await fileResponse.blob());
             }*/
           }
+
+        } else{
+          errorResponseToast(binariesResponse);
         }
 
         // We finally, download the generated zip

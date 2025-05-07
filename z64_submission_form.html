@@ -629,8 +629,6 @@
         if(!fileCommitResult) return;
 
         // Update the database
-        // TODO: THIS CAN HAVE CONCURRENCY ISSUES!!
-        // We could wait...? or retry...?
         var updateDatabaseResult = await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
           owner: username,
           repo: selectedRepo.repoName,
@@ -706,6 +704,24 @@
               return;
             };
           }
+
+        // If this is our repository, then manually trigger the database fixer for consistency
+        // For forks, this process is automated by Github Actions on every merge
+        } else{
+          // This throws an 403 forbidden error... we need more privileges, but that won't do
+          // I think it will be better to just trigger this somehow with a workflow
+          /*var dispatchResult = await octokit.request('POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches', {
+            owner: selectedRepo.originalRepoOwner,
+            repo: selectedRepo.repoName,
+            workflow_id: 'z64_database_fixer.yml',
+            ref: selectedRepo.repoDefaultBranch,
+
+          }).catch((err) => {
+            toast(`There was an error triggering Database Fixer workflow: ${err}`);
+          });
+
+          console.log("WORKFLOW DISPATCH RESULT:");
+          console.log(dispatchResult);*/
         }
         
         toast("Process completed!");
