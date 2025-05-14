@@ -40,4 +40,5 @@ jobs:
           git config --global user.email "<>"
           git add -A
           git commit -m "Database updated for PR #${{ github.event.number }}"
+          git pull
           git push

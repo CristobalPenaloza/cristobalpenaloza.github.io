@@ -37,4 +37,5 @@ jobs:
           git config --global user.email "<>"
           git add -A
           git commit -m "Database fixer - Manual run by @${{ github.actor }}"
+          git pull
           git push

@@ -60,15 +60,16 @@
         volumePreAmplifying: 0,
 
         // Available repos
+        // These repos cannot be deleted by the user, they will always be available, like it or not
         // TODO: ADD THE REAL REPOS!!!
         selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
         userRepos: [
           { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
-          { id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
+          //{ id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
         ],
       };
 
-      var repos = []; // <-- Add here more repos, added by the user
+      var repos = [];
       var selectedRepo = null;
       var database = []; // z64songs.json
       var gamesDb = []; // z64games.json
@@ -81,22 +82,31 @@
       var isListView = true;
 
       function errorResponseToast(response){
-        toast(`An error ocurred: ${response.url} [${response.status}]`);
+        errorToast(`An error ocurred: ${response.url} [${response.status}]`);
         /*for (const pair of response.headers.entries()) {
           console.log(`${pair[0]}: ${pair[1]}`);
         }*/
       }
-      function toast(message){
-        var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0]);
+      function toast(message, backgroundClass="bg-primary-subtle", textClass="text-primary-emphasis"){
+        var t = bootstrap.Toast.getOrCreateInstance($("#toast")[0], {
+          delay: 5000
+        });
+        $("#toast").removeClass(function (index, className) {
+          return (className.match (/((^|\s)text-\S+)|((^|\s)bg-\S+)/g) || []).join(' ');
+        }).addClass(backgroundClass + " " + textClass);
         $("#toastBody").text(message);
         t.show();
       }
+      function errorToast(message){
+        toast(message, "bg-danger-subtle", "text-danger-emphasis");//"bg-danger", "text-white");
+      }
 
+      //
       function saveSettings(asSettings = true){
         saveSettingsToStorage();
         toast((asSettings ? "Settings" : "Selections") + " saved to the browser's local storage!");
       }
-      function saveSettingsToStorage(){
+      function saveSettingsToStorage(repoToModify = "", addNewRepo = true){
         var settings = getSettings();
 
         // Start with the user options
@@ -126,6 +136,23 @@
           selections: uuidSelections,
         });
         else userRepos[repoIndex].selections = uuidSelections;
+
+        // We modify the repos if necessary
+        if(repoToModify){
+          if(addNewRepo){
+            var isAlreadyOnSettings = userRepos.some(function(repo){ return repo.id == repoToModify; });
+            if(isAlreadyOnSettings){
+              errorToast("Repo is already registered!");
+
+            } else{
+              userRepos.push({ id: repoToModify, selections: [] });
+              toast("Repo added successfully!");
+            }
+          } else{
+            userRepos = userRepos.filter(function(repo){ return repo.id !== repoToModify; });
+            toast("Repo removed successfully!");
+          }
+        }
         settings.userRepos = userRepos;
         
         // Finish the saving!
@@ -135,7 +162,13 @@
       }
       function getSettings(){
         try{
-          return JSON.parse(atob(localStorage.settings));
+          var settings = JSON.parse(atob(localStorage.settings));
+          defaultSettings.userRepos.forEach((repo, i) => {
+            // If we do not find this default repo within the user ones, we just add it
+            var isAvailable = settings.userRepos.some(r => r.id == repo.id);
+            if(!isAvailable) settings.userRepos.push(repo);
+          });
+          return settings;
 
         // If we cannot load the settings, then we crate a new one with default values
         } catch(e){
@@ -174,20 +207,56 @@
           localStorage.settings = btoa(JSON.stringify(settingsJson));
 
         } catch(e){
-          toast("There was an error! These settings file seems to be corrupted...");
+          errorToast("There was an error! These settings file seems to be corrupted...");
         }
 
         init();
       }
 
+      async function addRepository(){
+        $("#loadingOverlay").removeClass("d-none");
+
+        var newRepo = $("#txtAddRepository").val() ?? "";
+        var parts = newRepo.split("/");
+
+        if(parts.length != 3){
+          errorToast("The repository link doesn't have a valid format");
+
+        } else{
+          // Search for the z64 properties file
+          var z64PropertiesLink = `https://raw.githubusercontent.com/${newRepo}/z64musicpacker.properties`;
+          var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
+
+          // If we find it, we add this repository!
+          if(propertiesResponse.ok){
+            saveSettingsToStorage(newRepo, true);
+            
+          // If we don't find it, this is not a valid Z64 repository
+          } else{
+            errorToast("This is not a valid Z64 repository!");
+          }
+        }
+
+        await init();
+        $("#loadingOverlay").addClass("d-none");
+      }
+      async function removeRepository(repoId){
+        console.log("Removing repo: " + repoId);
+        $("#loadingOverlay").removeClass("d-none");
+        saveSettingsToStorage(repoId, false);
+        await init();
+        $("#loadingOverlay").addClass("d-none");
+      }
+
+
+
+      // MAIN LOADING
 
       async function init(){
         // We don't need auth for the stuff we will be doing here...
         $("#loadingOverlay").removeClass("d-none");
 
         try{
-           // For now, I think it would be better to just use predefined repos
-          // That ways is less cumbersome, and clearer for the users
           var settings = getSettings();
 
           // Load the user's settings!
@@ -205,8 +274,8 @@
           $("#rgVolumePreAmplifying").val(settings.volumePreAmplifying).trigger("input");
 
           // Now load their selections
-          //var userRepos = settings.userRepos.map(r => r.id); // <-- TODO: SHOULDN'T WE ADD HERE THE AVATAR AND STUFF? Yup :)
-          var userRepos = defaultSettings.userRepos.map(r => r.id);
+          // Settings by default add the default repos together with the user-defined ones
+          var userRepos = settings.userRepos.map(r => r.id);
           repos = [];
 
           // Load the properties from each repo
@@ -219,7 +288,7 @@
 
             // Get the z64musicpacker.properties from this repo
             // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
-            // DISCLAIMER: No fetch in this page will be cached... as we are getting information from github, and that info can change
+            // DISCLAIMER: No fetch in this page should be cached! As we are getting information from github, and that info can change
             // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
             var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
             var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
@@ -247,22 +316,27 @@
           }));
 
           
-          // TODO: ADD THE REPOS TO THE MAIN SELECT
+          $("#panelRepoSelection").empty();
           repos.forEach((repo, i) => {
+            var isDeletable = !defaultSettings.userRepos.some(r => r.id == repo.repoId);
             $("#panelRepoSelection").append(
               `<button type="button" class="btn border w-100 mb-3" id="btnSelectRepo${i}">
-                <div class="row">
+                <div class="row align-items-center">
                   <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
                   <div class="col text-start">
                     <h5 class="mb-0">${repo.name}</h5>
                     <span class="opacity-500">${repo.description}</span>
                   </div>
+                  ${isDeletable ? `<i id="btnRemoveRepo${i}" class="col-auto fa-solid fa-times" style="cursor: pointer"></i>` : ""}
                 </div>
               </button>`
             );
             $(`#btnSelectRepo${i}`).on("click", function(){
               selectedRepo = repo;
               loadRepo();
+            });
+            $(`#btnRemoveRepo${i}`).on("click", function(){
+              removeRepository(repo.repoId);
             });
           });
           
@@ -274,7 +348,8 @@
           $("#loadingOverlay").addClass("d-none");
 
         } catch(e){
-          toast("An error ocurred while loading! Reseting settings...");
+          // TODO: DO NOT DELETE IN EXPECTED CASES (error 429, error 404, internet outage, etc...)
+          errorToast("An fatal error ocurred while loading! Reseting settings...");
           deleteSettings();
           init();
         }
@@ -906,6 +981,7 @@
         $("#btnDownloadSongPack").on("click", downloadSongPack);
         $("#btnApplyFilters").on("click", applyFilters);
         $("#btnResetFilters").on("click", resetFilters);
+        $("#btnAddRepository").on("click", addRepository);
 
         $("#cbxSelectAll").on("change", function(){
           var checkedState = this.checked;
@@ -1272,8 +1348,18 @@
             <h1 class="modal-title fs-5">Select a repository</h1>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body text-center" id="panelRepoSelection">
-            
+          <div class="modal-body">
+            <div class="text-center" id="panelRepoSelection"></div>
+            <hr>
+            <div id="panelAddRepo">
+              <h6 class="opacity-50">Add a repository:</h6>
+              <div class="input-group">
+                <input type="text" id="txtAddRepository" class="form-control" placeholder="E.g.: DaruniasJoy/OoT-Custom-Sequences/Custom-Music-2.0" />
+                <button type="button" class="btn input-group-text btn-search px-3" id="btnAddRepository">Add</button>
+              </div>
+              
+              <small class="opacity-25">Use a Z64 repository link to add that repo to the packer. The repository owner should provide you a link in a valid format (Owner/Repository/branch).</small>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -1310,7 +1396,7 @@
       </div>
     </div>
 
-    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3">
       <div id="toast" class="toast align-items-center bg-primary-subtle text-primary-emphasis" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
           <div class="toast-body" id="toastBody"></div>
