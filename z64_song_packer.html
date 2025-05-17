@@ -65,6 +65,7 @@
         selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
         userRepos: [
           { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
+          //{ id: "CristobalPenaloza/BrokenRepository/main", selections: [] },
           //{ id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
         ],
       };
@@ -101,7 +102,10 @@
         toast(message, "bg-danger-subtle", "text-danger-emphasis");//"bg-danger", "text-white");
       }
 
-      //
+
+
+      // SETTINGS
+
       function saveSettings(asSettings = true){
         saveSettingsToStorage();
         toast((asSettings ? "Settings" : "Selections") + " saved to the browser's local storage!");
@@ -251,7 +255,7 @@
 
 
       // MAIN LOADING
-
+      
       async function init(){
         // We don't need auth for the stuff we will be doing here...
         $("#loadingOverlay").removeClass("d-none");
@@ -293,50 +297,63 @@
             var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
             var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
 
-            if(propertiesResponse.ok){
-              // Read the file
-              var properties = await propertiesResponse.json();
-              console.log(properties);
-              console.log(propertiesResponse);
+            var repoObject = {
+              repoName: repo,
+              repoOwner: owner,
+              repoDefaultBranch: defaultBranch,
+              repoId: id
+            };
 
-              // Load the repo into our list
-              repos.push({
-                repoName: repo,
-                repoOwner: owner,
-                repoDefaultBranch: defaultBranch,
-                repoId: id,
+            if(propertiesResponse.ok) {
+              try{
+                // Read the file as json and import the Z64 music packer properties
+                var properties = await propertiesResponse.json(); // TODO: WHAT DO WE DO IF THE PROPERTIES ARE BROKEN???
+                repoObject = { ...repoObject, ...properties };
 
-                // Import Z64 music packer properties
-                ...properties,
-              });
-
+              } catch(e){
+                repoObject["error"] = "An error ocurred while procesing properties file. Please report this error to the repository owner!";
+                errorToast(`An error ocurred while procesing z64properties file for: ${id}`);
+                console.log(e);
+              }
+              
             } else{
+              if(propertiesResponse.status == 404) repoObject["error"] = "Properties file not found. This must not be a valid Z64 repository!";
+              else if(propertiesResponse.status == 429) repoObject["error"] = "Too many requests! Please try again later.";
+              else repoObject["error"] = `An unknown error has ocurred [${propertiesResponse.status}].`;
               errorResponseToast(propertiesResponse);
             }
+
+            // Add our repo to the list
+            repos.push(repoObject);
           }));
 
           
           $("#panelRepoSelection").empty();
           repos.forEach((repo, i) => {
             var isDeletable = !defaultSettings.userRepos.some(r => r.id == repo.repoId);
+            var isBroken = Object.hasOwn(repo, "error");
             $("#panelRepoSelection").append(
-              `<button type="button" class="btn border w-100 mb-3" id="btnSelectRepo${i}">
+              `<button type="button" class="btn border w-100 mb-3 ${isBroken ? "bg-danger-subtle text-danger-emphasis" : ""}" id="btnSelectRepo${i}">
                 <div class="row align-items-center">
-                  <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl}" />
+                  <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl /*TODO: ADD DEFAULT IMAGE*/}" />
                   <div class="col text-start">
-                    <h5 class="mb-0">${repo.name}</h5>
-                    <span class="opacity-500">${repo.description}</span>
+                    <h5 class="mb-0">${repo.name ?? repo.repoName}</h5>
+                    <span class="opacity-500">${isBroken ? repo.error : repo.description}</span>
                   </div>
                   ${isDeletable ? `<i id="btnRemoveRepo${i}" class="col-auto fa-solid fa-times" style="cursor: pointer"></i>` : ""}
                 </div>
               </button>`
             );
-            $(`#btnSelectRepo${i}`).on("click", function(){
+            
+            // Only allow deleting this repository if it's manually added by the user
+            if(isDeletable) $(`#btnRemoveRepo${i}`).on("click", function(){
+              removeRepository(repo.repoId);
+            });
+
+            // Only allow selecting this repo if it's not broken
+            if(!isBroken) $(`#btnSelectRepo${i}`).on("click", function(){
               selectedRepo = repo;
               loadRepo();
-            });
-            $(`#btnRemoveRepo${i}`).on("click", function(){
-              removeRepository(repo.repoId);
             });
           });
           
@@ -348,8 +365,9 @@
           $("#loadingOverlay").addClass("d-none");
 
         } catch(e){
-          // TODO: DO NOT DELETE IN EXPECTED CASES (error 429, error 404, internet outage, etc...)
           errorToast("An fatal error ocurred while loading! Reseting settings...");
+          console.log("An fatal error ocurred while loading! Reseting settings...");
+          console.log(e);
           deleteSettings();
           init();
         }
@@ -373,6 +391,7 @@
         var gamesDbResponse = await fetch(gamesDbLink, { cache: "no-store" });
         if(gamesDbResponse.ok){
           gamesDb = await gamesDbResponse.json();
+
         } else{
           errorResponseToast(gamesDbResponse);
         }
@@ -1397,9 +1416,10 @@
     </div>
 
     <div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3">
-      <div id="toast" class="toast align-items-center bg-primary-subtle text-primary-emphasis" role="alert" aria-live="assertive" aria-atomic="true">
+      <div id="toast" class="toast align-items-center bg-primary-subtle text-primary-emphasis"
+        role="alert" aria-live="assertive" aria-atomic="true" style="width: 500px !important">
         <div class="d-flex">
-          <div class="toast-body" id="toastBody"></div>
+          <div class="toast-body" id="toastBody" style="word-break: break-word"></div>
           <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
       </div>
