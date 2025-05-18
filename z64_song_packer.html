@@ -102,6 +102,39 @@
         toast(message, "bg-danger-subtle", "text-danger-emphasis");//"bg-danger", "text-white");
       }
 
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      // This function is here to better handle request to raw.githubusercontent.com, given github strict rate limits for unauthenticated requests
+      async function githubFetch(link){
+        // For every single request we add an artificial delay (2 seconds)
+        await sleep(2000);
+        
+        // We should retry 3 times (only for special cases!)
+        for(var retry = 0; retry <= 3; retry++){
+          // We use "no-cache", since github correctly uses ETag and Date.
+          // We should trust their versioning (https://developer.mozilla.org/en-US/docs/Web/API/Request/cache)
+          // Although every single github file has a 5 min cache lifespan, but we should respect that!
+          // If we don't want to wait, then we have to login (implement that in the future...)
+          // For 429 retries, we use "reload", since we should NEVER cache it
+          var response = await fetch(link, { cache: retry == 0 ? "no-cache" : "reload" });
+
+          // If the response is an 429 (to many requests), we should wait a bit and try again (5 seconds)
+          // We should retry 3 times, before just returning
+          if(response.status == 429){
+            if(retry >= 3) return response;
+            else{
+              await sleep(5000);
+              continue;
+            }
+            
+          // On every other case, we just return the given response
+          // Everything else should be handled on a case by case basis
+          } else return response;
+        }
+      }
+
 
 
       // SETTINGS
@@ -229,7 +262,7 @@
         } else{
           // Search for the z64 properties file
           var z64PropertiesLink = `https://raw.githubusercontent.com/${newRepo}/z64musicpacker.properties`;
-          var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
+          var propertiesResponse = await githubFetch(z64PropertiesLink);
 
           // If we find it, we add this repository!
           if(propertiesResponse.ok){
@@ -284,7 +317,10 @@
 
           // Load the properties from each repo
           // We do this every time, to always have the latest version of each one
-          await Promise.all(userRepos.map(async (id) => {
+          // await Promise.all(userRepos.map(async (id) => { // <- Swapped to normal for-loop to allow sequencial requests, instead of simultaneous
+          for(var i = 0; i < userRepos.length; i++){
+            var id = userRepos[i];
+
             var idSplitted = id.split("/");
             var owner = idSplitted[0];
             var repo = idSplitted[1];
@@ -295,7 +331,7 @@
             // DISCLAIMER: No fetch in this page should be cached! As we are getting information from github, and that info can change
             // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
             var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
-            var propertiesResponse = await fetch(z64PropertiesLink, { cache: "no-store" });
+            var propertiesResponse = await githubFetch(z64PropertiesLink);
 
             var repoObject = {
               repoName: repo,
@@ -325,7 +361,7 @@
 
             // Add our repo to the list
             repos.push(repoObject);
-          }));
+          } //));
 
           
           $("#panelRepoSelection").empty();
@@ -388,7 +424,7 @@
 
         // Get the optional games database from the current repo
         var gamesDbLink = rawLink + "z64games.json";
-        var gamesDbResponse = await fetch(gamesDbLink, { cache: "no-store" });
+        var gamesDbResponse = await githubFetch(gamesDbLink);
         if(gamesDbResponse.ok){
           gamesDb = await gamesDbResponse.json();
 
@@ -398,7 +434,7 @@
 
         // Get the database from the current repo
         var dbLink = rawLink + "z64songs.json";
-        var dbResponse = await fetch(dbLink, { cache: "no-store" });
+        var dbResponse = await githubFetch(dbLink);
         if(dbResponse.ok){
           // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
           database = (await dbResponse.json()).filter((s) => showDMCACriticalTracks ? true : (s.isDMCACritical ?? false) == false);
@@ -879,7 +915,7 @@
         // Although, now it doesnt work... >:(
         var fileLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.binaries}/${song.file}`.replaceAll("//", "/");
         console.log("Downloading... [" + fileLink + "]")
-        var fileResponse = await fetch(fileLink, { cache: "no-store" });
+        var fileResponse = await githubFetch(fileLink);
         if(fileResponse.ok){
           // Finally, download the file as a blob
           var extension = song.file.split('.').pop();
@@ -900,7 +936,7 @@
 
         // Fetch the full binaries.zip file
         var binariesLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`.replaceAll("//", "/");
-        var binariesResponse = await fetch(binariesLink, { cache: "no-store" });
+        var binariesResponse = await githubFetch(binariesLink);
         if(binariesResponse.ok){
           var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
           // console.log(binaries);
