@@ -81,6 +81,7 @@
       var autosaveSelections = false;
       var showDMCACriticalTracks = false;
       var isListView = true;
+      var defaultAvatarUrl = "https://github.githubassets.com/images/gravatars/gravatar-user-420.png?size=32";
 
       function errorResponseToast(response){
         errorToast(`An error ocurred: ${response.url} [${response.status}]`);
@@ -109,7 +110,8 @@
       // This function is here to better handle request to raw.githubusercontent.com, given github strict rate limits for unauthenticated requests
       async function githubFetch(link){
         // For every single request we add an artificial delay (2 seconds)
-        await sleep(2000);
+        // await sleep(2000);
+        await sleep(1250);
         
         // We should retry 3 times (only for special cases!)
         for(var retry = 0; retry <= 3; retry++){
@@ -371,7 +373,7 @@
             $("#panelRepoSelection").append(
               `<button type="button" class="btn border w-100 mb-3 ${isBroken ? "bg-danger-subtle text-danger-emphasis" : ""}" id="btnSelectRepo${i}">
                 <div class="row align-items-center">
-                  <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl /*TODO: ADD DEFAULT IMAGE*/}" />
+                  <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl ?? defaultAvatarUrl}" />
                   <div class="col text-start">
                     <h5 class="mb-0">${repo.name ?? repo.repoName}</h5>
                     <span class="opacity-500">${isBroken ? repo.error : repo.description}</span>
@@ -411,91 +413,112 @@
 
 
       async function loadRepo(){
-        $("#loadingOverlay").removeClass("d-none");
+        try{
+          $("#loadingOverlay").removeClass("d-none");
+          $("#panelErrorView, #panelSongView, #panelGameView").addClass("d-none");
 
-        // Set the main selector
-        $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl);
-        $("#lbRepoName").text(selectedRepo.name);
-        var rawLink =  `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
+          // Set the main selector
+          $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl ?? defaultAvatarUrl);
+          $("#lbRepoName").text(selectedRepo.name ?? selectedRepo.repoName);
+          var rawLink =  `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
 
-        // Reset!
-        gamesDb = [];
-        database = [];
+          // Reset!
+          gamesDb = [];
+          database = [];
 
-        // Get the optional games database from the current repo
-        var gamesDbLink = rawLink + "z64games.json";
-        var gamesDbResponse = await githubFetch(gamesDbLink);
-        if(gamesDbResponse.ok){
-          gamesDb = await gamesDbResponse.json();
+          // Get the optional games database from the current repo
+          var gamesDbLink = rawLink + "z64games.json";
+          var gamesDbResponse = await githubFetch(gamesDbLink);
+          if(gamesDbResponse.ok){
+            gamesDb = await gamesDbResponse.json();
 
-        } else{
-          errorResponseToast(gamesDbResponse);
-        }
-
-        // Get the database from the current repo
-        var dbLink = rawLink + "z64songs.json";
-        var dbResponse = await githubFetch(dbLink);
-        if(dbResponse.ok){
-          // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
-          database = (await dbResponse.json()).filter((s) => showDMCACriticalTracks ? true : (s.isDMCACritical ?? false) == false);
-          database.forEach((item, i) => {
-            // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
-            item.index = i;
-          });
-          filteredDatabase = database;
-
-          // Get the saved selections
-          selections = [];
-          var settings = getSettings();
-          var userRepo = settings.userRepos.find(r => r.id == selectedRepo.repoId);
-          
-          if(userRepo){
-            //console.log("Loading selections... ");
-            //console.log(userRepo);
-            var songIndices = database.filter((s) => userRepo.selections.includes(s.uuid)).map((s) => s.index);
-            selections.push(...songIndices);
+          } else{
+            loadErrorView(gamesDbResponse);
+            return;
           }
 
-          // Show the list of games to the user
-          loadGamesList();
+          // Get the database from the current repo
+          var dbLink = rawLink + "z64songs.json";
+          var dbResponse = await githubFetch(dbLink);
+          if(dbResponse.ok){
+            // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
+            database = (await dbResponse.json()).filter((s) => showDMCACriticalTracks ? true : (s.isDMCACritical ?? false) == false);
+            database.forEach((item, i) => {
+              // We will use an index to map quickly. But when we want to export/import, we will use the uuid.
+              item.index = i;
+            });
+            filteredDatabase = database;
 
-          // Now load the filters
-          var musicGroups = [...new Set(database.map(s => s.game))].sort();
+            // Get the saved selections
+            selections = [];
+            var settings = getSettings();
+            var userRepo = settings.userRepos.find(r => r.id == selectedRepo.repoId);
+            
+            if(userRepo){
+              //console.log("Loading selections... ");
+              //console.log(userRepo);
+              var songIndices = database.filter((s) => userRepo.selections.includes(s.uuid)).map((s) => s.index);
+              selections.push(...songIndices);
+            }
 
-          $("#ddlFilterComposers").empty().append($("<option>", { value: "", text: "Any" }));
-          var composers = [...new Set(database.map(s => s.composers).concat(["Unknown"]).flat().filter(c => c))].sort();
-          composers.forEach(composer => {
-            $("#ddlFilterComposers").append($("<option>", {
-              value: composer,
-              text: composer
-            }));
-          });
+            // Show the list of games to the user
+            loadGamesList();
 
-          $("#ddlFilterConverters").empty().append($("<option>", { value: "", text: "Any" }));
-          var converters = [...new Set(database.map(s => s.converters).concat(["Unknown"]).flat().filter(c => c))].sort();
-          converters.forEach(converter => {
-            $("#ddlFilterConverters").append($("<option>", {
-              value: converter,
-              text: converter
-            }));
-          });
+            // Now load the filters
+            var musicGroups = [...new Set(database.map(s => s.game))].sort();
 
-          // We finish the loading
-          $("#loadingOverlay").addClass("d-none");
+            $("#ddlFilterComposers").empty().append($("<option>", { value: "", text: "Any" }));
+            var composers = [...new Set(database.map(s => s.composers).concat(["Unknown"]).flat().filter(c => c))].sort();
+            composers.forEach(composer => {
+              $("#ddlFilterComposers").append($("<option>", {
+                value: composer,
+                text: composer
+              }));
+            });
 
-          // Close the repo selection modal if it's open
-          var modalRepoSelection = bootstrap.Modal.getInstance('#modalRepoSelection');    
-          modalRepoSelection?.hide();
+            $("#ddlFilterConverters").empty().append($("<option>", { value: "", text: "Any" }));
+            var converters = [...new Set(database.map(s => s.converters).concat(["Unknown"]).flat().filter(c => c))].sort();
+            converters.forEach(converter => {
+              $("#ddlFilterConverters").append($("<option>", {
+                value: converter,
+                text: converter
+              }));
+            });
 
-          // Save our selections to storage
-          saveSettingsToStorage();
+            // We finish the loading
+            $("#panelSongView, #panelGameView").removeClass("d-none");
+            $("#loadingOverlay").addClass("d-none");
 
-          // Load default song view
-          loadSongsList([]);
+            // Close the repo selection modal if it's open
+            var modalRepoSelection = bootstrap.Modal.getInstance('#modalRepoSelection');    
+            modalRepoSelection?.hide();
 
-        } else{
-          errorResponseToast(dbResponse);
+            // Save our selections to storage
+            saveSettingsToStorage();
+
+            // Load default song view
+            loadSongsList([]);
+
+          } else{
+            loadErrorView(dbResponse);
+            return;
+          }
+        } catch(e){
+          loadErrorViewWithMessage("An unknown error has ocurred: " + e);
         }
+      }
+      function loadErrorView(response){
+        var errorMessage = "";
+        if(response.status == 404) errorMessage = "Song and/or game database file not found. There must be a problem in the repository properties. Contact the repository owner for help.";
+        else if(response.status == 429) errorMessage = "Too many requests! Please try again later.";
+        else errorMessage = `An unknown error has ocurred [${response.status}].`;
+        errorResponseToast(response);
+        loadErrorViewWithMessage(errorMessage);
+      }
+      function loadErrorViewWithMessage(errorMessage){
+        $("#lbErrorDescription").html(errorMessage);
+        $("#panelErrorView").removeClass("d-none");
+        $("#loadingOverlay").addClass("d-none");
       }
 
       function resetFilters(){
@@ -1084,6 +1107,10 @@
           $("#fileImportSettings").trigger("click");
         });
         $("#fileImportSettings").on("change", loadSettingsFromFile);
+        $("#btnDeleteSettings").on("click", function(){
+          deleteSettings();
+          init();
+        });
 
         // ----- NAV OPTIONS -----
         $("#txtSearchGames").on("input", function(){
@@ -1206,7 +1233,7 @@
       
       <button type="button" data-bs-toggle="modal" data-bs-target="#modalRepoSelection" class="btn border-0 px-2">
         <div class="row g-2">
-          <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="" />
+          <img id="imgRepoAvatar" class="rounded-circle ml-3 col-auto" width="24" height="24" src="https://github.githubassets.com/images/gravatars/gravatar-user-420.png?size=32" />
           <b class="col mb-0"><span id="lbRepoName">Z64 Test Repo</span> <i class="fa-solid fa-caret-down"></i></b>
         </div>
       </button>
@@ -1248,13 +1275,27 @@
               <input type="file" id="fileImportSettings" accept=".z64packersettings" hidden>
             </div>
           </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <button type="button" id="btnDeleteSettings" class="btn btn-outline-danger mx-3">
+              <i class="fas fa-trash me-2"></i>Delete settings
+            </button>
+          </li>
         </ul>
       </div>
     </nav>
 
     <div class="container mt-3">
       <div class="row g-3">
-        <div class="col-4">
+        <div class="col-12 d-none" id="panelErrorView">
+          <div class="card bg-danger-subtle text-center text-danger-emphasis py-3">
+            <i class="fa-solid fa-exclamation-triangle opacity-75 fa-2x mb-2"></i>
+            <h5 class="mb-2 px-3">There was an error loading the repository</i></h5>
+            <p class="opacity-75 mb-0" id="lbErrorDescription">Error description</p>
+          </div>
+        </div>
+
+        <div class="col-4 d-none" id="panelGameView">
           <div class="card bg-body-tertiary py-3">
             <div class="row align-items-center g-0 px-3 pb-3 border-bottom">
               <input class="form-check-input col-auto mt-0" type="checkbox" id="cbxSelectAll"/>
@@ -1269,7 +1310,7 @@
           </div>
         </div>
   
-        <div class="col-8">
+        <div class="col-8 d-none" id="panelSongView">
           <div class="card bg-body-tertiary py-3">
             <h5 class="mb-0 border-bottom px-3 pb-3" id="lbTitleSongs">Songs view</h5>
 
