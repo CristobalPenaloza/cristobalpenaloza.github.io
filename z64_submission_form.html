@@ -82,7 +82,8 @@
   {
     "imports": {
       "@popperjs/core": "https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/esm/popper.min.js",
-      "bootstrap": "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.esm.min.js"
+      "bootstrap": "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.esm.min.js",
+      "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.8.0/browser/index.min.js"
     }
   }
   </script>
@@ -93,6 +94,7 @@
       import { restEndpointMethods } from "https://esm.sh/@octokit/plugin-rest-endpoint-methods";
       import * as bootstrap from "bootstrap";
       import { MMCategories } from "./js/mmcategories.js";
+      import YAML from 'yaml';
 
       var authToken = "";
       var fileBase64 = "";
@@ -426,6 +428,8 @@
             
             var usesCustomBank = false;
             var usesCustomSamples = false;
+            var usesFormmask = false;
+            var isModernFormat = false;
 
             // Run over each file and extract data
             zip.forEach(function(path, file) {
@@ -467,25 +471,43 @@
                 });
               }
 
+              // Read the universal metadata yaml file
+              if(path.endsWith(".metadata")){
+                file.async("text").then(function(text) {
+                  var metadataYaml = YAML.parse(text);
+                  var metadata = metadataYaml["metadata"];
+                  console.log(metadata);
+
+                  $("#lbInternalName").text(metadata["display name"])
+                  $("#lbSongType").text(metadata["song type"].toLowerCase());
+                  $("#lbMusicGroups").text(metadata["music groups"].join(","));
+                  usesFormmask = (metadataYaml["formmask"] ?? []).length > 0;
+                  isModernFormat = true;
+                });
+              }
+
               // Check custom bank and samples
               if(path.endsWith(".zbank")) usesCustomBank = true;
               if(path.endsWith(".zsound")) usesCustomSamples = true;
+              if(path.endsWith(".formmask")) usesFormmask = true;
             });
-
+            
             // Load the info for both file types
             $("#lbFormat").text(ootrs ? "OOTRS" : "MMRS");
             $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
             $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
+            $("#lbUsesFormmask").text(usesFormmask ? "Yes" : "No");
 
             // Toggle the info only for each file type
-            $("#lbOOTRSOnlyInfo").toggleClass("d-none", !ootrs);
-            $("#lbMMRSOnlyInfo").toggleClass("d-none", ootrs);
+            // TODO: REMOVE, NO LONGER NEEDED!
+            //$("#lbOOTRSOnlyInfo").toggleClass("d-none", !ootrs);
+            //$("#lbMMRSOnlyInfo").toggleClass("d-none", ootrs);
 
             // Show the information
             $("#pInformationFromFile").removeClass("d-none");
 
             // TODO: LOAD THE FORM IN THE CORRECT FORMAT (ootrs or mmrs)
-            // If needed tho...
+            // If needed tho... Probably not...
 
             $("#loadingOverlay").addClass("d-none");
 
@@ -604,6 +626,7 @@
         var editMode = songToEdit != undefined;
         var originalFilePath = songToEdit?.file;
         var originalPreviewPath = songToEdit?.preview;
+        var ootrs = $("#lbFormat").text() == "OOTRS";
 
         // Create the new entry
         // If we are editing, just grab the existing entry
@@ -628,9 +651,10 @@
         // If we have a file selected... update the path
         if(fileBase64.length > 0){
           entry.type = $("#lbSongType").val();
-          entry.categories = toArray($("#lbFormat").text() == "OOTRS" ? $("#lbMusicGroups").text() : $("#lbCategories").text());
+          entry.categories = toArray(ootrs ? $("#lbMusicGroups").text() : $("#lbCategories").text());
           entry.usesCustomBank = $("#lbUsesCustomBank").text() == "Yes";
           entry.usesCustomSamples = $("#lbUsesCustomSamples").text() == "Yes";
+          if(!ootrs) entry.usesFormmask = $("#lbUsesFormmask").text() == "Yes";
 
           // Generate a local path for the entry
           var extension = $("#lbFormat").text().toLowerCase();
@@ -1015,15 +1039,11 @@
                 Information extracted from the file:<br>
                 <b>• Format:</b> <span id="lbFormat">...</span><br>
                 <b>• Type:</b> <span id="lbSongType">...</span><br><!--bgm or fanfare-->
-                <span id="lbOOTRSOnlyInfo">
-                  <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
-                  <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
-                </span>
-                <span id="lbMMRSOnlyInfo">
-                  <b>• Categories:</b> <span id="lbCategories">...</span><br>
-                </span>
+                <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
+                <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
                 <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
                 <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
+                <b>• Uses formmask: <span id="lbUsesFormmask">...</span></b>
               </p>
               <div class="invalid-feedback">
                 A valid file is needed for upload.

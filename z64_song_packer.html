@@ -543,6 +543,7 @@
         var filterVanillaBank = $("#cbxFilterVanillaBank").is(":checked");
         var filterCustomBank = $("#cbxFilterCustomBank").is(":checked");
         var filterCustomSamples = $("#cbxFilterCustomSamples").is(":checked");
+        var filterFormmask = $("#cbxFilterFormmask").is(":checked");
 
         filteredDatabase = database.filter(s => {
           return (filterGameName ? s.game.toLowerCase().includes(filterGameName.toLowerCase()) : true) &&
@@ -554,7 +555,8 @@
 
                  ((filterCustomSamples ? s.usesCustomSamples : false) ||
                  (filterCustomBank ? (s.usesCustomBank && !s.usesCustomSamples) : false) ||
-                 (filterVanillaBank ? (!s.usesCustomSamples && !s.usesCustomBank) : false));
+                 (filterVanillaBank ? (!s.usesCustomSamples && !s.usesCustomBank) : false) ||
+                 (filterFormmask ? s.usesFormmask : false));
         });
 
         loadGamesList();
@@ -1001,6 +1003,11 @@
                 z64File.file(file.name, lines.join('\n'));
               }
 
+              // Change the internal name on modern files (yaml metadata format)
+              if(useShortGameNames && file.name.endsWith(".metadata")){
+                // TODO: TODO: TODO <<<------------------------------------------------------------------------------------------------<
+              }
+
               // Modify the volume inside the seq file
               if(volumePreAmplifying != 0 && (file.name.endsWith(".seq") || file.name.endsWith(".zseq"))){
                 // I think this requires compatibility from the browser... check if it works in others than chrome
@@ -1421,6 +1428,10 @@
               <div class="form-check">
                 <input type="checkbox" class="form-check-input" id="cbxFilterCustomSamples" checked>
                 <label class="form-check-label" for="cbxFilterCustomSamples">Uses a custom bank and samples</label>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="cbxFilterFormmask" checked>
+                <label class="form-check-label" for="cbxFilterFormmask">Uses formmask (MM only)</label>
               </div>
             </div>
 
