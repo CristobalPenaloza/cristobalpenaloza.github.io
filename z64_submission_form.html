@@ -429,7 +429,7 @@
             var usesCustomBank = false;
             var usesCustomSamples = false;
             var usesFormmask = false;
-            var isModernFormat = false;
+            var isLegacyFormat = true;
 
             // Run over each file and extract data
             zip.forEach(function(path, file) {
@@ -482,7 +482,7 @@
                   $("#lbSongType").text(metadata["song type"].toLowerCase());
                   $("#lbMusicGroups").text(metadata["music groups"].join(","));
                   usesFormmask = (metadataYaml["formmask"] ?? []).length > 0;
-                  isModernFormat = true;
+                  isLegacyFormat = false;
                 });
               }
 
@@ -497,6 +497,7 @@
             $("#lbUsesCustomBank").text(usesCustomBank ? "Yes" : "No");
             $("#lbUsesCustomSamples").text(usesCustomSamples ? "Yes" : "No");
             $("#lbUsesFormmask").text(usesFormmask ? "Yes" : "No");
+            $("#lbIsLegacyFormat").text(isLegacyFormat ? "Yes" : "No");
 
             // Toggle the info only for each file type
             // TODO: REMOVE, NO LONGER NEEDED!
@@ -1037,13 +1038,14 @@
               <input id="fileUpload" type="file" class="form-control" accept=".ootrs,.mmrs" required/>
               <p class="opacity-600 mb-0 d-none" id="pInformationFromFile">
                 Information extracted from the file:<br>
-                <b>• Format:</b> <span id="lbFormat">...</span><br>
-                <b>• Type:</b> <span id="lbSongType">...</span><br><!--bgm or fanfare-->
-                <b>• Internal name:</b> <span id="lbInternalName">...</span><br>
-                <b>• Music groups:</b> <span id="lbMusicGroups">...</span><br>
-                <b>• Uses custom bank:</b> <span id="lbUsesCustomBank">...</span><br>
-                <b>• Uses custom samples:</b> <span id="lbUsesCustomSamples">...</span>
-                <b>• Uses formmask: <span id="lbUsesFormmask">...</span></b>
+                <span class="opacity-50">• Format:</span> <b id="lbFormat">...</b><br>
+                <span class="opacity-50">• Type:</span> <b id="lbSongType">...</b><br><!--bgm or fanfare-->
+                <span class="opacity-50">• Internal name:</span> <b id="lbInternalName">...</b><br>
+                <span class="opacity-50">• Music groups:</span> <b id="lbMusicGroups">...</b><br>
+                <span class="opacity-50">• Uses custom bank:</span> <b id="lbUsesCustomBank">...</b><br>
+                <span class="opacity-50">• Uses custom samples:</span> <b id="lbUsesCustomSamples">...</b><br>
+                <span class="opacity-50">• Uses formmask:</span> <b id="lbUsesFormmask">...</b><br>
+                <span class="opacity-50">• Is legacy format:</span> <b id="lbIsLegacyFormat">...</b>
               </p>
               <div class="invalid-feedback">
                 A valid file is needed for upload.

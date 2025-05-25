@@ -3,6 +3,7 @@ import os
 import zipfile
 import uuid
 import traceback
+import yaml
 from pathlib import Path
 
 def detectSongs():
@@ -107,7 +108,7 @@ def detectSongs():
                                 if not filename.endswith('.ootrs') and not filename.endswith('.mmrs'): continue
 
                                 # Extract data from the file
-                                type, categories, usesCustomBank, usesCustomSamples = extractMetadata(os.path.join(dirpath, filename))
+                                type, categories, usesCustomBank, usesCustomSamples, usesFormmask = extractMetadata(os.path.join(dirpath, filename))
 
                                 # GAME MANAGEMENT
                                 # Update the games database
@@ -144,6 +145,7 @@ def detectSongs():
                                     database[i]["categories"] = categories
                                     database[i]["usesCustomBank"] = usesCustomBank
                                     database[i]["usesCustomSamples"] = usesCustomSamples
+                                    database[i]["usesFormmask"] = usesFormmask
 
                                 # If is not there, add it!
                                 else:
@@ -155,6 +157,7 @@ def detectSongs():
                                         'categories': categories,
                                         'usesCustomBank': usesCustomBank,
                                         'usesCustomSamples': usesCustomSamples,
+                                        'usesFormmask': usesFormmask,
                                         'uuid': str(uuid.uuid4()),
                                         'file': fullPath
                                     })
@@ -190,16 +193,36 @@ def safe_list_index(iterable, value, default = None):
             return i
     return default
 
-def extractMetadata(path) -> tuple[str, list, bool, bool]:
-    isOOTRS = path.endswith('.ootrs')
-    if isOOTRS: return extractMetadataFromOOTRS(path)
-    else: return extractMetadataFromMMRS(path)
 
-
-def extractMetadataFromOOTRS(path) -> tuple[str, list, bool, bool]:
+def extractMetadata(path) -> tuple[str, list, bool, bool, bool]:
     archive = zipfile.ZipFile(path, 'r')
     namelist = archive.namelist()
+    
+    isOOTRS = path.endswith('.ootrs')
+    isUniversalYamlFormat = any(n.endswith('.metadata') for n in namelist)
+    
+    if isUniversalYamlFormat: return extractMetadataFromUniversalYamlFormat(archive, namelist)
+    elif isOOTRS: return extractMetadataFromOOTRS(archive, namelist)
+    else: return extractMetadataFromMMRS(archive, namelist)
 
+def extractMetadataFromUniversalYamlFormat(archive, namelist) -> tuple[str, list, bool, bool, bool]:
+    # TODO: <-----------------------------------------------------------------------------------------------------< TEST TEST TEST
+    for name in namelist:
+        if name.endswith('.metadata'):
+            with archive.open(name) as metadata_file:
+                metadata_yaml = yaml.parse(metadata_file)
+                metadata = metadata_yaml['metadata']
+
+                seq_type = metadata['song type'].lower()
+                groups = metadata['music groups']
+                usesCustomBank = any(n.endswith('.zbank') for n in namelist)
+                usesCustomSamples = any(n.endswith('.zsound') for n in namelist)
+                usesFormmask = len(metadata['music groups'] or []) > 0
+
+                return seq_type, groups, usesCustomBank, usesCustomSamples, usesFormmask
+
+
+def extractMetadataFromOOTRS(archive, namelist) -> tuple[str, list, bool, bool, bool]:
     for name in namelist:
         if name.endswith('.meta'):
             with archive.open(name) as meta_file:
@@ -214,13 +237,10 @@ def extractMetadataFromOOTRS(path) -> tuple[str, list, bool, bool]:
                 usesCustomBank = any(n.endswith('.zbank') for n in namelist)
                 usesCustomSamples = any(n.endswith('.zsound') for n in namelist)
 
-                return seq_type, groups, usesCustomBank, usesCustomSamples
+                return seq_type, groups, usesCustomBank, usesCustomSamples, False
 
 
-def extractMetadataFromMMRS(path) -> tuple[str, list, bool, bool]:
-    archive = zipfile.ZipFile(path, 'r')
-    namelist = archive.namelist()
-
+def extractMetadataFromMMRS(archive, namelist) -> tuple[str, list, bool, bool, bool]:
     for name in namelist:
         if name == 'categories.txt':
             with archive.open(name) as categories_file:
@@ -237,8 +257,11 @@ def extractMetadataFromMMRS(path) -> tuple[str, list, bool, bool]:
                 # Check if uses custom banks and samples
                 usesCustomBank = any(n.endswith('.zbank') for n in namelist)
                 usesCustomSamples = any(n.endswith('.zsound') for n in namelist)
+                usesFormmask = any(n.endswith('.formmask') for n in namelist)
 
-                return seq_type, categories, usesCustomBank, usesCustomSamples
+                return seq_type, categories, usesCustomBank, usesCustomSamples, usesFormmask
+
+    
 
 def main():
     result = detectSongs()
