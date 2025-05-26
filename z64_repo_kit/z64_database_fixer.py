@@ -24,7 +24,6 @@ def detectSongs():
             if not os.path.exists('z64games.json'):
                 with open('z64games.json', 'w+') as f: f.write('[]')
 
-
             # First, open the games database
             with open('z64games.json', 'r+') as gamesFile:
                 print("OPENING GAME DATABASE FILE")
@@ -206,18 +205,18 @@ def extractMetadata(path) -> tuple[str, list, bool, bool, bool]:
     else: return extractMetadataFromMMRS(archive, namelist)
 
 def extractMetadataFromUniversalYamlFormat(archive, namelist) -> tuple[str, list, bool, bool, bool]:
-    # TODO: <-----------------------------------------------------------------------------------------------------< TEST TEST TEST
     for name in namelist:
         if name.endswith('.metadata'):
             with archive.open(name) as metadata_file:
-                metadata_yaml = yaml.parse(metadata_file)
+                metadata_yaml = yaml.safe_load(metadata_file.read())
                 metadata = metadata_yaml['metadata']
 
+                # These first two are not optional!
                 seq_type = metadata['song type'].lower()
                 groups = metadata['music groups']
                 usesCustomBank = any(n.endswith('.zbank') for n in namelist)
                 usesCustomSamples = any(n.endswith('.zsound') for n in namelist)
-                usesFormmask = len(metadata['music groups'] or []) > 0
+                usesFormmask = len(metadata.get('formmask', [])) > 0
 
                 return seq_type, groups, usesCustomBank, usesCustomSamples, usesFormmask
 
