@@ -1,3 +1,4 @@
+# Database fixer for Z64 custom music repositories | Version 1.1
 import json
 import os
 import zipfile
