@@ -265,7 +265,7 @@
 
         } else{
           // Search for the z64 properties file
-          var z64PropertiesLink = `https://raw.githubusercontent.com/${newRepo}/z64musicpacker.properties`;
+          var z64PropertiesLink = `https://raw.githubusercontent.com/${newRepo}/z64packer/z64musicpacker.properties`;
           var propertiesResponse = await githubFetch(z64PropertiesLink);
 
           // If we find it, we add this repository!
@@ -334,7 +334,7 @@
             // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
             // DISCLAIMER: No fetch in this page should be cached! As we are getting information from github, and that info can change
             // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
-            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64musicpacker.properties`;
+            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64packer/z64musicpacker.properties`;
             var propertiesResponse = await githubFetch(z64PropertiesLink);
 
             var repoObject = {
@@ -429,7 +429,7 @@
           database = [];
 
           // Get the optional games database from the current repo
-          var gamesDbLink = rawLink + "z64games.json";
+          var gamesDbLink = rawLink + "z64packer/z64games.json";
           var gamesDbResponse = await githubFetch(gamesDbLink);
           if(gamesDbResponse.ok){
             gamesDb = await gamesDbResponse.json();
@@ -440,7 +440,7 @@
           }
 
           // Get the database from the current repo
-          var dbLink = rawLink + "z64songs.json";
+          var dbLink = rawLink + "z64packer/z64songs.json";
           var dbResponse = await githubFetch(dbLink);
           if(dbResponse.ok){
             // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!

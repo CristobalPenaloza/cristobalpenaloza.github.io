@@ -5,7 +5,8 @@ This is a collection of files, to be used to convert any normal repository into 
 PROVIDE THE FILES
 First you need to put the following files in the ROOT of your repository:
 
-z64_missing_song_detector.py
+z64_database_fixer.py
+z64_python_requirements.txt
 z64games.json
 z64musicpacker.properties
 z64songs.json
