@@ -291,18 +291,6 @@
           clearFullSubmissionForm();
         }
 
-
-
-        
-        // TODO: CONTINUAR ACÁ <---- Mover esto al submitform
-        $("#btnCreateNewPullRequest").attr("href", `https://github.com/${selectedRepo.originalRepoOwner}/${selectedRepo.repoName}/compare/${selectedRepo.repoDefaultBranch}...${username}:${selectedRepo.repoName}:${selectedRepo.repoDefaultBranch}?expand=1`);
-        console.log("CREATED LINK: " + $("#btnCreateNewPullRequest").attr("href"));
-
-
-
-
-
-
         $("#imgRepoAvatar").attr("src", repo.originalRepoAvatarUrl);
         $("#lbRepoName").text(repo.name);
         $("#loadingOverlay").addClass("d-none");
@@ -586,9 +574,8 @@
       }
       function clearFullSubmissionForm(){
         $("input[name=rbSubmissionType]").prop('checked', false);
-        $("#mainForm").addClass("d-none");
-        $("#panelSongSelect").addClass("d-none");
-        $("#panelResults").addClass("d-none");
+        $("#mainForm, #panelSongSelect, #panelResults").addClass("d-none");
+        $("#preMainForm").removeClass("d-none");
         clearForm();
       }
       function clearForm(){
@@ -724,8 +711,9 @@
         // We only do this on forks to allow compatibility for repo owners to also use the submission form
         if(selectedRepo.repoIsFork){
 
-          // We create a comment for this new entry
+          // We create a title and comment for this new entry
           var additionalNotes = $("#txtNotes").val();
+          var title = `${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}`;
           var comment = `## ${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}\n### User's notes:\n"${additionalNotes || "None"}"\n### Entry added:\n<details>\n<summary>Spoiler</summary>\n\n\`\`\`\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n\n</details>`;
 
           // Check if a pull request is already up for this repo
@@ -743,15 +731,19 @@
             return;
           }
 
-
+          // Get the PR number if exists
+          var prNumber = 0;
+          var noCurrentPR = currentPRResult.data.length == 0;
+          if(!noCurrentPR) prNumber = currentPRResult.data[0].number;
+          
           // If we are using a classic token, then we can create the PR here!
           if(authToken.startsWith("ghp_")){
             // If there is no current PR, we add a new one
-            if(currentPRResult.data.length == 0){
+            if(noCurrentPR){
               var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
                 owner: selectedRepo.originalRepoOwner,
                 repo: selectedRepo.repoName,
-                title: `${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}`,
+                title: title,
                 body: comment,
                 head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
                 base: selectedRepo.repoDefaultBranch,
@@ -764,9 +756,13 @@
                 return;
               }
 
+              // Get the new PR number!
+              console.log("CREATE PULL REQUEST RESULT:");
+              console.log(pullRequestResult);
+              prNumber = pullRequestResult.data.number;
+
             // If there IS an already opened PR, just add a comment to go in par with the just recently made commit
             } else{
-              var prNumber = currentPRResult.data[0].number;
               var commentResult = await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
                 owner: selectedRepo.originalRepoOwner,
                 repo: selectedRepo.repoName,
@@ -784,10 +780,29 @@
 
           // If we are using a fine grained PAT, then the PR needs to be created manually!
           } else{
-            
+            // ... nothing to do here
           }
 
-          
+          // If we have a PR already open, then we are good to go!
+          if(prNumber > 0){
+            $("#btnViewCurrentPullRequest").attr("href", `https://github.com/${selectedRepo.originalRepoOwner}/${selectedRepo.repoName}/pull/${prNumber}`);
+            $("#btnCreateNewPullRequest, #pCreateNewPullRequest").addClass("d-none");
+            $("#btnViewCurrentPullRequest, #pViewCurrentPullRequest").removeClass("d-none");
+
+          // If there's no PR, then prompt the user to create it manually
+          } else{
+            $("#btnCreateNewPullRequest").attr("href", `https://github.com/${selectedRepo.originalRepoOwner}/${selectedRepo.repoName}/compare/${selectedRepo.repoDefaultBranch}...${username}:${selectedRepo.repoName}:${selectedRepo.repoDefaultBranch}?expand=1`);
+            $("#btnCreateNewPullRequest, #pCreateNewPullRequest").removeClass("d-none");
+            $("#btnViewCurrentPullRequest, #pViewCurrentPullRequest").addClass("d-none");
+            $("#txtPullRequestTitle").text(title);
+            $("#txtPullRequestDescription").text(comment);
+          }
+
+          // Show the results panel
+          clearFullSubmissionForm();
+          $("#panelResults").removeClass("d-none");
+          $("#loadingOverlay, #preMainForm").addClass("d-none");
+          toast("Process completed!");
 
         // If this is our repository, then manually trigger the database fixer for consistency
         // For forks, this process is automated by Github Actions on every merge
@@ -806,12 +821,13 @@
 
           console.log("WORKFLOW DISPATCH RESULT:");
           console.log(dispatchResult);
+
+          // For owners just a toast is enough... We have no PRs to create or show
+          await syncRepoAndGetLatestDatabase();
+          clearFullSubmissionForm();
+          $("#loadingOverlay").addClass("d-none");
+          toast("Process completed! Triggering Database Fixer workflow!");
         }
-        
-        toast("Process completed!");
-        await syncRepoAndGetLatestDatabase();
-        clearFullSubmissionForm();
-        $("#loadingOverlay").addClass("d-none");
       }
       async function commitFileToRepo(octokit, fileBase64, folder, originalPath, finalPath){
         if(fileBase64.length > 0){
@@ -1003,7 +1019,7 @@
           <div class="form-group mb-3">
             <label>GitHub authorization token:</label>
             <p class="hint">The token with access to the fork of the repository you are trying to send this file.</p>
-            <input type="text" id="txtGithubAuthToken" class="form-control" placeholder="github_pat_xxxxx... or ghp_xxxxx..." />
+            <input type="password" id="txtGithubAuthToken" class="form-control" placeholder="github_pat_xxxxx... or ghp_xxxxx..." />
           </div>
           <p class="opacity-50">Don't know how to get an authorization token?<br>Then you need to see <a target=”_blank” href="https://github.com/CristobalPenaloza/cristobalpenaloza.github.io/wiki/Submitting-a-song-to-a-Z64-repository">this guide</a>!</p>
 
@@ -1205,10 +1221,12 @@
 
           <div id="panelResults" class="p-3">
             <h5>Submission process completed!</h5>
-            <br>
-            <p>
-              <b>But you're not done yet!</b><br>
-              Now you have to <i>create a pull request</i>.<br>
+            <hr>
+            <div id="pCreateNewPullRequest">
+              <p>
+                <b>But you're not done yet!</b><br>
+                Now you have to <i>create a pull request</i>.
+              </p>
               <ol>
                 <li class="mb-3">Press the button below to open the GitHub pull request form in a new tab.</li>
                 <li class="mb-3">
@@ -1224,9 +1242,10 @@
                 </li>
                 <li class="mb-3">Finally, press the green button <b><i>Create pull request</i></b>.</li>
               </ol>
-              And with that, you're actually done!
-            </p>
-            <p><b>You're done!</b> The pull request was created correctly. You can press the button below to go to GitHub and view your pull request.</p>
+              <p>And with that, you're actually done!<p>
+            </div>
+            
+            <p id="pViewCurrentPullRequest"><b>You're done!</b> The pull request is ready, so sit tight until a verifier checks your submission. You can press the button below to go to GitHub and view your current pull request.</p>
             <p class="opacity-50">Take into consideration that your submission, once approved, can take <i>up to 5 minutes</i> to be reflected on the packer.</p>
 
             <a id="btnCreateNewPullRequest" href="#" target="_blank" class="btn btn-primary w-100 mb-2">
