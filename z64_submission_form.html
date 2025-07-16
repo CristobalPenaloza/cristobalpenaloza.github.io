@@ -275,7 +275,6 @@
           toast(e);
         }
       }
-
       async function selectRepo(repo){
         selectedRepo = repo;
         $("#loadingOverlay").removeClass("d-none");
@@ -292,11 +291,22 @@
           clearFullSubmissionForm();
         }
 
+
+
+        
+        // TODO: CONTINUAR ACÁ <---- Mover esto al submitform
+        $("#btnCreateNewPullRequest").attr("href", `https://github.com/${selectedRepo.originalRepoOwner}/${selectedRepo.repoName}/compare/${selectedRepo.repoDefaultBranch}...${username}:${selectedRepo.repoName}:${selectedRepo.repoDefaultBranch}?expand=1`);
+        console.log("CREATED LINK: " + $("#btnCreateNewPullRequest").attr("href"));
+
+
+
+
+
+
         $("#imgRepoAvatar").attr("src", repo.originalRepoAvatarUrl);
         $("#lbRepoName").text(repo.name);
         $("#loadingOverlay").addClass("d-none");
       }
-
       async function syncRepoAndGetLatestDatabase(){
         const octokit = buildOctokit();
         var error = null;
@@ -568,10 +578,17 @@
 
 
       // ----- CLEARING -----
+      async function syncRepoAndClearForm(){
+        $("#loadingOverlay").removeClass("d-none");
+        await syncRepoAndGetLatestDatabase();
+        clearFullSubmissionForm();
+        $("#loadingOverlay").addClass("d-none");
+      }
       function clearFullSubmissionForm(){
         $("input[name=rbSubmissionType]").prop('checked', false);
         $("#mainForm").addClass("d-none");
         $("#panelSongSelect").addClass("d-none");
+        $("#panelResults").addClass("d-none");
         clearForm();
       }
       function clearForm(){
@@ -726,41 +743,51 @@
             return;
           }
 
-          // If there is no current PR, we add a new one
-          if(currentPRResult.data.length == 0){
-            var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
-              owner: selectedRepo.originalRepoOwner,
-              repo: selectedRepo.repoName,
-              title: `${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}`,
-              body: comment,
-              head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
-              base: selectedRepo.repoDefaultBranch,
 
-            }).catch((err) => {
-              toast(`Couldn't create a pull request: ${err}`);
-            });
-            if(pullRequestResult === undefined) {
-              $("#loadingOverlay").addClass("d-none");
-              return;
+          // If we are using a classic token, then we can create the PR here!
+          if(authToken.startsWith("ghp_")){
+            // If there is no current PR, we add a new one
+            if(currentPRResult.data.length == 0){
+              var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
+                owner: selectedRepo.originalRepoOwner,
+                repo: selectedRepo.repoName,
+                title: `${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}`,
+                body: comment,
+                head: username + ":" + selectedRepo.repoDefaultBranch, // <-- We only do to the main branch... I could implement it for selected branches tho
+                base: selectedRepo.repoDefaultBranch,
+
+              }).catch((err) => {
+                toast(`Couldn't create a pull request: ${err}`);
+              });
+              if(pullRequestResult === undefined) {
+                $("#loadingOverlay").addClass("d-none");
+                return;
+              }
+
+            // If there IS an already opened PR, just add a comment to go in par with the just recently made commit
+            } else{
+              var prNumber = currentPRResult.data[0].number;
+              var commentResult = await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+                owner: selectedRepo.originalRepoOwner,
+                repo: selectedRepo.repoName,
+                issue_number: prNumber,
+                body: comment,
+
+              }).catch((err) => {
+                toast(`Couldn't comment on the already created pull request: ${err}`);
+              });
+              if(commentResult === undefined) {
+                $("#loadingOverlay").addClass("d-none");
+                return;
+              };
             }
 
-          // If there IS an already opened PR, just add a comment to go in par with the just recently made commit
+          // If we are using a fine grained PAT, then the PR needs to be created manually!
           } else{
-            var prNumber = currentPRResult.data[0].number;
-            var commentResult = await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
-              owner: selectedRepo.originalRepoOwner,
-              repo: selectedRepo.repoName,
-              issue_number: prNumber,
-              body: comment,
-
-            }).catch((err) => {
-              toast(`Couldn't comment on the already created pull request: ${err}`);
-            });
-            if(commentResult === undefined) {
-              $("#loadingOverlay").addClass("d-none");
-              return;
-            };
+            
           }
+
+          
 
         // If this is our repository, then manually trigger the database fixer for consistency
         // For forks, this process is automated by Github Actions on every merge
@@ -782,12 +809,10 @@
         }
         
         toast("Process completed!");
-        
         await syncRepoAndGetLatestDatabase();
         clearFullSubmissionForm();
         $("#loadingOverlay").addClass("d-none");
       }
-
       async function commitFileToRepo(octokit, fileBase64, folder, originalPath, finalPath){
         if(fileBase64.length > 0){
           // If we are editing, get the file SHA we are trying to edit
@@ -845,6 +870,7 @@
         }
         return true;
       }
+
 
 
       // ----- UTILS -----
@@ -925,6 +951,19 @@
           $("#filePreview")[0].required = songToEdit == undefined && this.value == "file"; // We allow optionals if we are editing to maintain the original file
         });
         $("#filePreview").on("change", processPreviewFile);
+
+        // Result bindings
+        $("#txtPullRequestTitle, #txtPullRequestDescription").on("click", function(){
+          var range = document.createRange();
+          range.selectNode($(this)[0]);
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(range);
+
+          navigator.clipboard.writeText($(this).text());
+          toast("Text copied to clipboard!");
+        });
+
+        $("#btnModifyAnotherSong").on("click", syncRepoAndClearForm);
       });
     </script>
 
@@ -1031,7 +1070,6 @@
           <!--TODO: Add typeahead for choosing the existing track on edit mode-->
 
           <form id="mainForm" class="d-none needs-validation p-3 pt-0">
-            
             <div class="form-group mb-3">
               <label>File:</label>
               <p class="hint">The z64 song file you are uploading (ootrs, mmrs). If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded file.</p>
@@ -1165,7 +1203,45 @@
             </button>
           </form>
 
-          
+          <div id="panelResults" class="p-3">
+            <h5>Submission process completed!</h5>
+            <br>
+            <p>
+              <b>But you're not done yet!</b><br>
+              Now you have to <i>create a pull request</i>.<br>
+              <ol>
+                <li class="mb-3">Press the button below to open the GitHub pull request form in a new tab.</li>
+                <li class="mb-3">
+                  Paste the following text on their respective fields (you can click to copy):<br>
+                  <div class="form-group my-2">
+                    <label>Title:</label>
+                    <span id="txtPullRequestTitle" class="form-control">An example title</span>
+                  </div>
+                  <div class="form-group">
+                    <label>Description:</label>
+                    <span id="txtPullRequestDescription" class="form-control">An example description</span>
+                  </div>
+                </li>
+                <li class="mb-3">Finally, press the green button <b><i>Create pull request</i></b>.</li>
+              </ol>
+              And with that, you're actually done!
+            </p>
+            <p><b>You're done!</b> The pull request was created correctly. You can press the button below to go to GitHub and view your pull request.</p>
+            <p class="opacity-50">Take into consideration that your submission, once approved, can take <i>up to 5 minutes</i> to be reflected on the packer.</p>
+
+            <a id="btnCreateNewPullRequest" href="#" target="_blank" class="btn btn-primary w-100 mb-2">
+              <i class="fa-solid fa-code-pull-request me-2"></i><span>Create new pull request</span>
+            </a>
+
+            <a id="btnViewCurrentPullRequest" href="#" target="_blank" class="btn btn-primary w-100 mb-2">
+              <i class="fa-solid fa-code-pull-request me-2"></i><span>View current pull request</span>
+            </a>
+
+            <button id="btnModifyAnotherSong" type="button" class="btn w-100">
+              <i class="fa-solid fa-edit me-2"></i>Upload/modify another song
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
