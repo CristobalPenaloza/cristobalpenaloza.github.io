@@ -964,7 +964,7 @@
         var zip = new JSZip();
 
         // Fetch the full binaries.zip file
-        var binariesLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/binaries.zip`.replaceAll("//", "/");
+        var binariesLink = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/z64packer/binaries.zip`.replaceAll("//", "/");
         var binariesResponse = await githubFetch(binariesLink);
         if(binariesResponse.ok){
           var binaries = await new JSZip().loadAsync(await binariesResponse.blob());
