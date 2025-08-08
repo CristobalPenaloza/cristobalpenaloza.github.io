@@ -380,7 +380,8 @@
                   <img class="rounded-circle ml-3 col-auto" width="45" height="45" src="${repo.avatarUrl ?? defaultAvatarUrl}" />
                   <div class="col text-start">
                     <h5 class="mb-0">${repo.name ?? repo.repoName}</h5>
-                    <span class="opacity-500">${isBroken ? repo.error : repo.description}</span>
+                    <span class="opacity-75">${isBroken ? repo.error : repo.description}</span>
+                    <span class="opacity-25">${repo.repoId}</span>
                   </div>
                   ${isDeletable ? `<i id="btnRemoveRepo${i}" class="col-auto fa-solid fa-times" style="cursor: pointer"></i>` : ""}
                 </div>
@@ -1096,6 +1097,9 @@
 
         
         // ----- TOP LEVEL BUTTONS -----
+        $("#btnViewRepositoryOnGithub").on("click", function(){
+          window.open(`https://github.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}`, '_blank').focus();
+        });
         $("#btnSaveSelections").on("click", function(){
           saveSettings(false);
         });
@@ -1260,7 +1264,8 @@
       </button>
       <span class="mx-1 opacity-25">|</span>
 
-      <i class="fa-solid fa-lg fa-save nav-link ms-2 mt-1" style="cursor: pointer;" title="Save selections" id="btnSaveSelections"></i>
+      <i class="fa-brands fa-lg fa-github nav-link ms-2 mt-1" style="cursor: pointer;" title="View repository on GitHub" id="btnViewRepositoryOnGithub"></i>
+      <i class="fa-solid fa-lg fa-save nav-link ms-3 mt-1" style="cursor: pointer;" title="Save selections" id="btnSaveSelections"></i>
       <i class="fa-solid fa-lg fa-moon nav-link ms-3 mt-1" style="cursor: pointer;" title="Theme" id="btnTheme"></i>
       <div class="nav-item dropdown col-auto">
         <button class="btn btn-link nav-link mx-3" style="margin-top: 1px;" title="Configuration" id="btnConfiguration" data-bs-toggle="dropdown"
