@@ -3,6 +3,9 @@ import os
 import openpyxl
 import gdown
 
+# TODO: ALLOW MULTI-PREVIEW
+# TODO: DETECT MULTIPLE MUSIC MAKERS
+
 url = "https://docs.google.com/spreadsheets/d/1Yvgjex502cB_dVvvZm0a88aGL4WNFOm-5XvEbZLkWqI/export"
 workbookPath = "z64packer/dj_datasheet.xlsx"
 propertiesPath = 'z64packer/z64musicpacker.properties'
@@ -129,12 +132,13 @@ def safe_list_index(iterable, value, default = None):
 def compareTexts(a, b):
    nA = normalize(a)
    nB = normalize(b)
+   #if "WHALE" in b: print("<--------------------------------Comparing..." + nA + " | " + nB)
    return nA in nB or nB in nA
  
 def normalize(text):
    if text == "???": return "UNKNOWN"
-   t = text.upper().replace("Á", "A").replace("É", "E").replace("Í", "I").replace("Ó", "O").replace("Ú", "U")
-   r = [" ", "'", ":", "-", "/", ".", "(", ")", "!", ";", "\""]
+   t = text.upper().replace("Á", "A").replace("É", "E").replace("Í", "I").replace("Ó", "O").replace("Ú", "U").replace("FANFARE - ", "")
+   r = [" ", "'", ":", "-", "/", ".", "(", ")", "!", ";", "\"", "&", ","]
    for char in r:
       t = t.replace(char, "")
    return t
