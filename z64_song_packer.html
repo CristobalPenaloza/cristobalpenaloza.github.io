@@ -53,6 +53,7 @@
         darkTheme: true,
         autosaveSelections: false,
         showDMCACriticalTracks: false,
+        githubFetchDelay: 1250,
         isListView: true,
         viewMetadata: false,
         viewCategories: false,
@@ -113,9 +114,8 @@
 
       // This function is here to better handle request to raw.githubusercontent.com, given github strict rate limits for unauthenticated requests
       async function githubFetch(link){
-        // For every single request we add an artificial delay (2 seconds)
-        // await sleep(2000);
-        await sleep(1250);
+        var settings = getSettings();
+        await sleep(settings.githubFetchDelay || 1250);
         
         // We should retry 3 times (only for special cases!)
         for(var retry = 0; retry <= 3; retry++){
@@ -156,6 +156,7 @@
         settings.darkTheme = $("html").attr("data-bs-theme") == "dark";
         settings.autosaveSelections = autosaveSelections; 
         settings.showDMCACriticalTracks = showDMCACriticalTracks;
+        settings.githubFetchDelay = parseInt(parseFloat($("#rgGithubFetchDelay").val()) * 1000);
         settings.isListView = isListView;
         settings.viewMetadata = $("#cbxViewMetadata").is(":checked");
         settings.viewCategories = $("#cbxViewCategories").is(":checked");
@@ -185,23 +186,21 @@
           if(addNewRepo){
             var isAlreadyOnSettings = userRepos.some(function(repo){ return repo.id == repoToModify; });
             if(isAlreadyOnSettings){
-              errorToast("Repo is already registered!");
+              errorToast(`Repo ${repoToModify} is already registered!`);
 
             } else{
               userRepos.push({ id: repoToModify, selections: [] });
-              toast("Repo added successfully!");
+              toast(`Repo ${repoToModify} added successfully!`);
             }
           } else{
             userRepos = userRepos.filter(function(repo){ return repo.id !== repoToModify; });
-            toast("Repo removed successfully!");
+            toast(`Repo ${repoToModify} removed successfully!`);
           }
         }
         settings.userRepos = userRepos;
         
         // Finish the saving!
         localStorage.settings = btoa(JSON.stringify(settings));
-        //console.log("Settings saved!");
-        //console.log(settings);
       }
       function getSettings(){
         try{
@@ -307,6 +306,7 @@
           $("#cbxAutosaveSelections").prop('checked', settings.autosaveSelections);
           autosaveSelections = settings.autosaveSelections;
           $("#cbxShowDMCACriticalTracks").prop('checked', settings.showDMCACriticalTracks);
+          $("#rgGithubFetchDelay").val((settings.githubFetchDelay || 1250) * 0.001).trigger("input");
           showDMCACriticalTracks = settings.showDMCACriticalTracks;
           isListView = settings.isListView;
           $("#cbxViewMetadata").prop('checked', settings.viewMetadata);
@@ -1286,6 +1286,22 @@
               <input class="form-check-input" type="checkbox" id="cbxShowDMCACriticalTracks">
               <label class="form-check-label" for="cbxShowDMCACriticalTracks">Show DMCA critical tracks</label>
               <p class="hint">Those tracks are not stream safe, and could produce DMCA claims. Don't use them if you plan on monetizing your content! Maintain this option disabled if you want to be on the safe side.</p>
+            </div>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <div class="form-group mx-3">
+              <div class="row g-3">
+                <div class="col-auto">
+                  <label class="form-label col-form-label" for="rgGithubFetchDelay">GitHub fetch delay:</label>
+                </div>
+                <div class="col pt-2">
+                  <input type="range" class="form-range" id="rgGithubFetchDelay" min="0.25" max="2" step="0.05"
+                    oninput="$('#lbGithubFetchDelay').text(Number(this.value).toFixed(2) + ' sec.')">
+                </div>
+                <span class="col-auto pt-2" style="width: 80px;" id="lbGithubFetchDelay">1.25 sec.</span>
+              </div>
+              <p class="hint">This adds an artificial delay (in seconds) to every request made to GitHub, to prevent issues with their rate limit. You can reduce it to increase the speed and responsiveness of the packer, with the added risk of getting "Too Many Requests (429)" errors.</p>
             </div>
           </li>
           <li><hr class="dropdown-divider"></li>
