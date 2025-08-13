@@ -840,44 +840,50 @@
       // ------- PREVIEWS ---------
 
       function previewSong(song){
-        var preview = song.preview;
-        
-        // If it's local, grab it from our repo!
-        if(!preview.startsWith("https://")){
-          preview = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.previews}/${song.preview}`.replaceAll("//", "/");
-        }
+        var previewList = [];
+        if(song.preview instanceof Array) previewList = song.preview;
+        else previewList = [song.preview];
+        console.log(`Found ${previewList.length} preview(s) for song ${song.song}`);
 
-        console.log("Playing preview... " + preview);
-        $("#lbTitleSongPreview").text(song.game + " - " + song.song);
-        $("#panelAudioPreview, #panelYouTubePreview").addClass("d-none");
-
-        // Stop the current song
-        stopPreview();
-
-        // If it's a YouTube link, we load it as an embed
-        if(preview.startsWith("https://www.youtube.com") || preview.startsWith("https://youtu.be")){
-          var regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-          var match = preview.match(regExp);
-
-          if (match && match[2].length == 11) {
-            var videoId = match[2];
-            $("#ytpSongPreview").attr("src", "https://www.youtube.com/embed/" + videoId + "?autoplay=1");
-            $("#panelYouTubePreview").removeClass("d-none");
-            
-          } else {
-            alert("An error ocurred while processing a YouTube link.\n\nThe link could be corrupted or invalid.");
+        // Loop on each preview and add it for play
+        previewList.forEach(preview => {
+          // If it's local, grab it from our repo!
+          if(!preview.startsWith("https://")){
+            preview = "https://" + `raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/${selectedRepo.previews}/${song.preview}`.replaceAll("//", "/");
           }
 
-        } else{
-          // Load the preview
-          $("#asrcSongPreview").attr("src", preview);
+          console.log("Playing preview... " + preview);
+          $("#lbTitleSongPreview").text(song.game + " - " + song.song);
+          $("#panelAudioPreview, #panelYouTubePreview").addClass("d-none");
 
-          // Reload the audio player
-          var audioPlayer = $("#apSongPreview")[0];
-          audioPlayer.load();
-          audioPlayer.play();
-          $("#panelAudioPreview").removeClass("d-none");
-        }
+          // Stop the current song
+          stopPreview();
+
+          // If it's a YouTube link, we load it as an embed
+          if(preview.startsWith("https://www.youtube.com") || preview.startsWith("https://youtu.be")){
+            var regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            var match = preview.match(regExp);
+
+            if (match && match[2].length == 11) {
+              var videoId = match[2];
+              $("#ytpSongPreview").attr("src", "https://www.youtube.com/embed/" + videoId + "?autoplay=1");
+              $("#panelYouTubePreview").removeClass("d-none");
+              
+            } else {
+              alert("An error ocurred while processing a YouTube link.\n\nThe link could be corrupted or invalid.");
+            }
+
+          } else{
+            // Load the preview
+            $("#asrcSongPreview").attr("src", preview);
+
+            // Reload the audio player
+            var audioPlayer = $("#apSongPreview")[0];
+            audioPlayer.load();
+            audioPlayer.play();
+            $("#panelAudioPreview").removeClass("d-none");
+          }
+        });
 
         // Show the modal
         var modalSongPreview = new bootstrap.Modal('#modalSongPreview', {});
@@ -1074,7 +1080,7 @@
       $(function(){
         init();
         $("#modalSongPreview").on("hide.bs.modal", stopPreview);
-        $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat").on("change", function(){
+        $("#cbxViewMetadata, #cbxViewCategories, #cbxViewFormat, #rgGithubFetchDelay").on("change", function(){
           updateSongViewOptions();
           saveSettings();
         });
