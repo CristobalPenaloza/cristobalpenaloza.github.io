@@ -1,4 +1,4 @@
-# Database fixer for Z64 custom music repositories | Version 1.1
+# Database fixer for Z64 custom music repositories | Version 1.2
 import json
 import os
 import zipfile
@@ -8,14 +8,15 @@ import yaml
 from pathlib import Path
 
 def detectSongs():
-    propertiesPath = 'z64packer/z64musicpacker.properties'
+    propertiesPath = 'z64musicpacker.properties'
     binariesPath = 'z64packer/binaries.zip'
     songsPath = 'z64packer/z64songs.json'
     gamesPath = 'z64packer/z64games.json'
 
     if not os.path.exists(propertiesPath):
-      print('This is not an Z64 repository | Missing z64musicpacker.properties file')
-      return False
+        propertiesPath = 'z64packer/z64musicpacker.properties'
+        if not os.path.exists(propertiesPath):
+            raise Exception('This is not an Z64 repository | Missing z64musicpacker.properties file')
     
     with open(propertiesPath, encoding='ISO-8859-1') as propertiesFile:
         properties = json.load(propertiesFile)
