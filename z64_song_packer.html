@@ -48,6 +48,9 @@
       import { MMCategories } from "./js/mmcategories.js";
       import YAML from 'yaml';
 
+      // TODO: ADD SUPPORT FOR MULTIPLE PREVIEW FILES!!!
+      // TODO: ADD DISCORD FRIENDLY FORMAT FOR SUBMISSION COMMENTS FOR PRS 
+
       var defaultSettings = {
         // Default options
         darkTheme: true,
@@ -63,15 +66,12 @@
         volumePreAmplifying: 0,
 
         // Available repos
-        // These repos cannot be deleted by the user, they will always be available, like it or not
-        // TODO: ADD THE REAL REPOS!!!
-        //selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
-        selectedRepoId: "DaruniasJoy/OoT-Custom-Sequences/Custom-Music-2.0",
+        // These repos CANNOT be deleted by the user, they will always be available, like it or not
+        selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
         userRepos: [
+          { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
           { id: "DaruniasJoy/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
-          //{ id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
-          //{ id: "CristobalPenaloza/BrokenRepository/main", selections: [] },
-          //{ id: "CristobalPenaloza/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
+          // TODO: Add upcoming MM repo
         ],
       };
 
@@ -87,6 +87,8 @@
       var showDMCACriticalTracks = false;
       var isListView = true;
       var defaultAvatarUrl = "https://github.githubassets.com/images/gravatars/gravatar-user-420.png?size=32";
+
+
 
       function errorResponseToast(response){
         errorToast(`An error ocurred: ${response.url} [${response.status}]`);
@@ -124,7 +126,16 @@
           // Although every single github file has a 5 min cache lifespan, but we should respect that!
           // If we don't want to wait, then we have to login (implement that in the future...)
           // For 429 retries, we use "reload", since we should NEVER cache it
-          var response = await fetch(link, { cache: retry == 0 ? "no-cache" : "reload" });
+          var response = await fetch(link, {
+            headers: {
+              'Accept': 'application/octet-stream'
+            },
+            cache: retry == 0 ? "no-cache" : "reload",
+            redirect: 'follow',
+            //mode: "no-cors"
+          });
+          
+          console.log(response);
 
           // If the response is an 429 (to many requests), we should wait a bit and try again (5 seconds)
           // We should retry 3 times, before just returning
@@ -266,7 +277,7 @@
 
         } else{
           // Search for the z64 properties file
-          var z64PropertiesLink = `https://raw.githubusercontent.com/${newRepo}/z64packer/z64musicpacker.properties`;
+          var z64PropertiesLink = `https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/z64packer/z64musicpacker.properties`;
           var propertiesResponse = await githubFetch(z64PropertiesLink);
 
           // If we find it, we add this repository!
@@ -336,8 +347,9 @@
             // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
             // DISCLAIMER: No fetch in this page should be cached! As we are getting information from github, and that info can change
             // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
-            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64packer/z64musicpacker.properties`;
+            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/z64packer/z64musicpacker.properties`;
             var propertiesResponse = await githubFetch(z64PropertiesLink);
+            console.log(propertiesResponse);
 
             var repoObject = {
               repoName: repo,
@@ -425,14 +437,14 @@
           // Set the main selector
           $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl ?? defaultAvatarUrl);
           $("#lbRepoName").text(selectedRepo.name ?? selectedRepo.repoName);
-          var rawLink =  `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/`;
+          var rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/z64packer/`;
 
           // Reset!
           gamesDb = [];
           database = [];
 
           // Get the optional games database from the current repo
-          var gamesDbLink = rawLink + "z64packer/z64games.json";
+          var gamesDbLink = rawLink + "z64games.json";
           var gamesDbResponse = await githubFetch(gamesDbLink);
           if(gamesDbResponse.ok){
             gamesDb = await gamesDbResponse.json();
@@ -443,7 +455,7 @@
           }
 
           // Get the database from the current repo
-          var dbLink = rawLink + "z64packer/z64songs.json";
+          var dbLink = rawLink + "z64songs.json";
           var dbResponse = await githubFetch(dbLink);
           if(dbResponse.ok){
             // Load the database | IMMEDIATLY filter DMCA-critical tracks, we don't want any surprises!
@@ -1317,11 +1329,13 @@
               <input type="file" id="fileImportSettings" accept=".z64packersettings" hidden>
             </div>
           </li>
-          <li><hr class="dropdown-divider"></li>
-          <li>
+          <li class="text-center pt-3">
             <button type="button" id="btnDeleteSettings" class="btn btn-outline-danger mx-3">
               <i class="fas fa-trash me-2"></i>Delete settings
             </button>
+          </li>
+          <li class="text-center pt-4">
+            <p class="opacity-25 lh-sm mb-0">Made with ❤️ for the<br>OoT & MM randomizer communities</span>
           </li>
         </ul>
       </div>
