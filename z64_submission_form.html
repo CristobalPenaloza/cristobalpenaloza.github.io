@@ -206,13 +206,18 @@
               repo: repo.name,
               path: "z64packer/z64musicpacker.properties",
               request: { retries: 0 }
+            }).catch((error) => { });
 
-            }).catch((error) => {
-              // Console already throws an error... Search a way to hide it, since is correctly catched
-              // console.log(error.request.url + " is not and Z64 repository!");
-            });
-
-            // TODO: Add version, and compatible files to z64musicpacker.properties
+            // If we do not find it, try to search on a secondary branch
+            if(response === undefined){
+              var response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                owner: originalRepoOwner,
+                repo: repo.name,
+                path: "z64musicpacker.properties",
+                ref: "z64packer",
+                request: { retries: 0 }
+              }).catch((error) => { });
+            }
             
             // If we find a z64musicpacker.properties file, this is a compatible repo!
             if(response !== undefined){
@@ -238,7 +243,7 @@
 
           // Check if we have z64 fork repos available
           if(repos.length == 0){
-            toast("No Z64 repos found for this account!");
+            toast("No Z64 fork repos found for this account! See the guide on this page on how to create a fork for one.");
             $("#loadingOverlay").addClass("d-none");
             return;
 
@@ -714,7 +719,7 @@
           // We create a title and comment for this new entry
           var additionalNotes = $("#txtNotes").val();
           var title = `${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}`;
-          var comment = `## ${editMode ? "Modify" : "Add new"} song: ${entry.game} - ${entry.song}\n### User's notes:\n"${additionalNotes || "None"}"\n### Entry added:\n<details>\n<summary>Spoiler</summary>\n\n\`\`\`\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n\n</details>`;
+          var comment = `\`\`\`\n${JSON.stringify(entry, null, '\t')}\n\`\`\``;
 
           // Check if a pull request is already up for this repo
           var currentPRResult = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
@@ -736,8 +741,13 @@
           var noCurrentPR = currentPRResult.data.length == 0;
           if(!noCurrentPR) prNumber = currentPRResult.data[0].number;
           
+
+          // TODO: CHECK IF THERE IS ACTUALLY NO ALTERNATIVE TO THIS <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+          // ...
+
           // If we are using a classic token, then we can create the PR here!
           if(authToken.startsWith("ghp_")){
+          //if(true){
             // If there is no current PR, we add a new one
             if(noCurrentPR){
               var pullRequestResult = await octokit.request('POST /repos/{owner}/{repo}/pulls', {

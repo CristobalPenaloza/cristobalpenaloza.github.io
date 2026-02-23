@@ -67,7 +67,7 @@
 
         // Available repos
         // These repos CANNOT be deleted by the user, they will always be available, like it or not
-        selectedRepoId: "CristobalPenaloza/Z64PackerTestRepo/main",
+        selectedRepoId: "DaruniasJoy/OoT-Custom-Sequences/Custom-Music-2.0",
         userRepos: [
           { id: "CristobalPenaloza/Z64PackerTestRepo/main", selections: [] },
           { id: "DaruniasJoy/OoT-Custom-Sequences/Custom-Music-2.0", selections: [] }
@@ -344,12 +344,20 @@
             var defaultBranch = idSplitted[2];
 
             // Get the z64musicpacker.properties from this repo
-            // https://raw.githubusercontent.com/CristobalPenaloza/Z64PackerTestRepo/main/z64musicpacker.properties
+            // From main branch: https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64packer/z64musicpacker.properties
+            // From secondary branch: https://raw.githubusercontent.com/${owner}/${repo}/z64packer/z64musicpacker.properties
             // DISCLAIMER: No fetch in this page should be cached! As we are getting information from github, and that info can change
             // by the minute, we need to be able to always get the latest version (see https://stackoverflow.com/a/42518434)
-            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/z64packer/z64musicpacker.properties`;
+            
+            // First we try getting it from the main branch (classic method)
+            var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/z64packer/z64musicpacker.properties`;
             var propertiesResponse = await githubFetch(z64PropertiesLink);
-            console.log(propertiesResponse);
+
+            // If we did not find there, we try the secondary branch
+            if(!propertiesResponse.ok){
+              var z64PropertiesLink = `https://raw.githubusercontent.com/${owner}/${repo}/z64packer/z64musicpacker.properties`;
+              var propertiesResponse = await githubFetch(z64PropertiesLink);
+            }
 
             var repoObject = {
               repoName: repo,
@@ -437,7 +445,9 @@
           // Set the main selector
           $("#imgRepoAvatar").attr("src", selectedRepo.avatarUrl ?? defaultAvatarUrl);
           $("#lbRepoName").text(selectedRepo.name ?? selectedRepo.repoName);
-          var rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/z64packer/`;
+          
+          var rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/${selectedRepo.repoDefaultBranch}/z64packer/`;
+          if(selectedRepo.useSecondaryBranch == 'true') rawLink = `https://raw.githubusercontent.com/${selectedRepo.repoOwner}/${selectedRepo.repoName}/z64packer/`;
 
           // Reset!
           gamesDb = [];
