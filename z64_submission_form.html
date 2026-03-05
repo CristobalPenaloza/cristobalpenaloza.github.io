@@ -99,6 +99,8 @@
       var authToken = "";
       var fileBase64 = "";
       var previewBase64 = "";
+      var previewFormat = "";
+      const supportedPreviewFormats = ["mp3", "ogg"]
 
       // Info about the user:
       var username = "";
@@ -547,14 +549,15 @@
           $("#loadingOverlay").removeClass("d-none");
           var file = event.target.files[0];
           previewBase64 = (await toBase64(file)).split(",").pop();
+          previewFormat = file.name.split(".").pop().toLowerCase();
 
-          // If it's an mp3 file, finish
-          if(file.name.toLowerCase().endsWith(".mp3")){
+          // If it's a compatible file, finish!
+          if(supportedPreviewFormats.includes(previewFormat)){
             $("#loadingOverlay").addClass("d-none");
 
-          // If it's NOT a mp3 file, then thrown an error
+          // If it's NOT a compatible file, then thrown an error
           } else{
-            toast("This preview file is not an mp3 file!");
+            toast(`This preview file format (${previewFormat}) is not supported!`);
             clearPreviewInput();
           }
 
@@ -565,6 +568,7 @@
       }
       function clearPreviewInput(){
         previewBase64 = "";
+        previewFormat = "";
         $("#filePreview").val("");
         $("#loadingOverlay").addClass("d-none");
       }
@@ -676,8 +680,8 @@
         if($("#ddlPreviewType").val() == "link") entry.preview = $("#txtPreviewLink").val();
         else if(previewBase64.length > 0){
           // Generate a local path for the preview and upload it as a commit
-          entry.preview = entry.game + "/" + entry.song + ".mp3";
-          var previewCommitResult = commitFileToRepo(octokit, previewBase64, selectedRepo.previews, originalPreviewPath, entry.preview);
+          entry.preview = entry.game + "/" + entry.song + "." + previewFormat;
+          var previewCommitResult = await commitFileToRepo(octokit, previewBase64, selectedRepo.previews, originalPreviewPath, entry.preview);
           if(!previewCommitResult) return;
         }
 
@@ -1120,7 +1124,7 @@
   
             <div class="form-group mb-3">
               <label>Game name:</label>
-              <p class="hint">The name of the game your song comes from.</p>
+              <p class="hint">The name of the game your song comes from. Use the full name, not an abbreviation.</p>
               <input id="txtGameName" type="text" class="form-control" placeholder="E.g.: Rhythm Heaven Fever" />
             </div>
   
@@ -1185,7 +1189,7 @@
               <select id="ddlPreviewType" class="form-select" required>
                 <option value="">Select a preview type...</option>
                 <option value="link">YouTube link / Sound file link</option>
-                <option value="file">Direct MP3 upload</option>
+                <option value="file">Direct file upload</option>
               </select>
               <div class="invalid-feedback">
                 A preview is needed.
@@ -1207,10 +1211,10 @@
 
             <div id="fgPreviewFile">
               <label>Preview file:</label>
-              <p class="hint">The preview sound file of your track. <b>Only MP3 files are allowed.</b> If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded preview file.</p>
-              <input id="filePreview" type="file" class="form-control" accept=".mp3" required/>
+              <p class="hint">The preview sound file of your track. <b>Only MP3 and OGG files are allowed.</b> If you are only editing the metadata of an existing track, you can leave this input empty to not make any changes to the already uploaded preview file.</p>
+              <input id="filePreview" type="file" class="form-control" accept=".mp3,.ogg" required/>
               <div class="invalid-feedback">
-                A valid MP3 file is required.
+                A valid supported file is required.
               </div>
             </div>
             
