@@ -457,7 +457,7 @@
               if(!ootrs && path == "categories.txt"){
                 file.async("text").then(function(text) {
                   var categories = text.replaceAll('-', ','); // <-- Normalize separator
-                  $("#lbCategories").text(categories);
+                  $("#lbMusicGroups").text(categories);
 
                   // Detect if the categories are correctly mapped
                   // TODO: THESE ARE NOT ALL THE CATEGORIES THERE ARE... ADD AN UTILITY CLASS FOR THIS STUFF
@@ -669,7 +669,7 @@
         // If we have a file selected... update the path
         if(fileBase64.length > 0){
           entry.type = $("#lbSongType").val();
-          entry.categories = toArray(ootrs ? $("#lbMusicGroups").text() : $("#lbCategories").text());
+          entry.categories = toArray($("#lbMusicGroups").text());
           entry.usesCustomBank = $("#lbUsesCustomBank").text() == "Yes";
           entry.usesCustomSamples = $("#lbUsesCustomSamples").text() == "Yes";
           if(!ootrs) entry.usesFormmask = $("#lbUsesFormmask").text() == "Yes";
@@ -1113,7 +1113,7 @@
                 <span class="opacity-50">• Format:</span> <b id="lbFormat">...</b><br>
                 <span class="opacity-50">• Type:</span> <b id="lbSongType">...</b><br><!--bgm or fanfare-->
                 <span class="opacity-50">• Internal name:</span> <b id="lbInternalName">...</b><br>
-                <span class="opacity-50">• Music groups:</span> <b id="lbMusicGroups">...</b><br>
+                <span class="opacity-50">• Music groups/categories:</span> <b id="lbMusicGroups">...</b><br>
                 <span class="opacity-50">• Uses custom bank:</span> <b id="lbUsesCustomBank">...</b><br>
                 <span class="opacity-50">• Uses custom samples:</span> <b id="lbUsesCustomSamples">...</b><br>
                 <span class="opacity-50">• Uses formmask:</span> <b id="lbUsesFormmask">...</b><br>
