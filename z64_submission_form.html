@@ -662,6 +662,10 @@
         entry.converters = toArray($("#txtConverters").val());
         entry.isDMCACritical = $("#cbxIsDMCACritical").is(":checked");
 
+        // Remove any reserved characters from the path, so we can create a valid tree after
+        var unsafeCharacters = /[\\\/:*?"<>|]/g
+        var safeFilePath = entry.game.replace(unsafeCharacters, "") + "/" + entry.song.replace(unsafeCharacters, "");
+
         // If we have a file selected... update the path
         if(fileBase64.length > 0){
           entry.type = $("#lbSongType").val();
@@ -672,7 +676,7 @@
 
           // Generate a local path for the entry
           var extension = $("#lbFormat").text().toLowerCase();
-          entry.file = entry.game + "/" + entry.song + "." + extension;
+          entry.file = safeFilePath + "." + extension;
         }
 
         // Add/modify the preview link/file
@@ -680,7 +684,7 @@
         if($("#ddlPreviewType").val() == "link") entry.preview = $("#txtPreviewLink").val();
         else if(previewBase64.length > 0){
           // Generate a local path for the preview and upload it as a commit
-          entry.preview = entry.game + "/" + entry.song + "." + previewFormat;
+          entry.preview = safeFilePath + "." + previewFormat;
           var previewCommitResult = await commitFileToRepo(octokit, previewBase64, selectedRepo.previews, originalPreviewPath, entry.preview);
           if(!previewCommitResult) return;
         }

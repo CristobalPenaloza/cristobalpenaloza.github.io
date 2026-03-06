@@ -655,7 +655,6 @@
             var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfSeries.length ? "checked" : "indeterminate");
 
             // Set the current state of the checkbox (we do it like this for the intermediate stuff)
-
             if(checkState != "") $(`#cbxSeries${i}`).prop(checkState, true);
             
             // Filter the games inside this series
@@ -720,13 +719,15 @@
       function createGameNavItem(panelId, game, i){
         var isPartOfSeries = ("" + i).includes("_");
         var songsOfGame = filteredDatabase.filter(s => s.game == game);
+        if(songsOfGame.length == 0) return; // Skip this game if we do not have any songs inside...
+
         var songsChecked = songsOfGame.filter(s => selections.includes(s.index));
         var checkState = songsChecked.length == 0 ? "" : (songsChecked.length >= songsOfGame.length ? "checked" : "indeterminate");
         
         // Append the game nav item
         $(panelId).append(
           `<div class="btn-game row g-0" id="btnGame${i}" data-game="${game}">
-            ${isPartOfSeries ? `<i class="fa-solid fa-rotate-90 fa-arrow-turn-up col-auto me-3 opacity-50" style="margin-left: .3rem"></i>` : ""}
+            ${isPartOfSeries ? `<span class="col-auto me-3 opacity-25" style="margin-left: .3rem"><i class="fa-solid fa-rotate-90 fa-arrow-turn-up"></i></span>` : ""}
             <input class="form-check-input col-auto" type="checkbox" value="" id="cbxGame${i}" ${checkState}/>
             <span class="col ms-3">${game}</span>
             <span class="col-auto me-4">${songsChecked.length}/${songsOfGame.length}</span>
