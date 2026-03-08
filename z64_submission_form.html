@@ -708,7 +708,7 @@
           repo: selectedRepo.repoName,
           path: "z64packer/z64songs.json",
           message: `${editMode ? "Modify" : "Add"} entry in database for file ${entry.file}`,
-          content: btoa(JSON.stringify(database, null, 2)), // <- We add spaces for readability for maintainers
+          content: btoa(unescape(encodeURIComponent(JSON.stringify(database, null, 2)))), // <- We add spaces for readability for maintainers
           sha: databaseSha
           
         }).catch((err) => {
